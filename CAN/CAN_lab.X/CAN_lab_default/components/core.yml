@@ -15,7 +15,18 @@ dependency:
 customDataClassName: com.microchip.utils_mh3.utils.persistence.CustomModuleData
 data:
   attachments: {}
-  elementPosition: {}
+  elementPosition:
+    attributes:
+      id: __ROOTVIEW
+    children:
+    - children:
+      - attributes:
+          id: core
+          x: '99'
+          y: '172'
+        type: ElementPosition
+      type: ElementPositions
+    type: ComponentGraph
   symbols:
     CONFIG_CLOCK_DFLL_ENABLE:
       attributes:

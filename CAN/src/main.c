@@ -1,43 +1,35 @@
 /*******************************************************************************
  * CAN Protocol Educational Demo
  * 
- * Target: PIC32CM3204GV00048 + ATA6561 Transceiver
- * UART: SERCOM0 (PA08=TX, PA09=RX) via MCP2221
+ * This demo simulates a Vehicle ECU sending CAN messages.
+ * The terminal shows each CAN frame being "transmitted" with full explanation.
  * 
- * This demo teaches CAN protocol concepts:
- * - Frame structure (ID, DLC, Data, CRC)
- * - Bit timing and synchronization
- * - Bus arbitration (CSMA/CD)
- * - Error detection
- * - Real automotive applications
- * 
- * NOTE: This MCU has NO built-in CAN controller.
- *       For real CAN, add MCP2515 external controller.
+ * Hardware: PIC32CM3204GV00048 + ATA6561 (transceiver only, no CAN controller)
+ * UART: SERCOM0 (PA08=TX, PA09=RX) @ 115200 baud
  ******************************************************************************/
 
  #include <stddef.h>
  #include <stdbool.h>
  #include <stdlib.h>
 #include <stdint.h>
- #include <string.h>
  #include "definitions.h"
  
-/* LED macros for ACTIVE-LOW LEDs */
+/* LED Control (Active-Low) */
 #define LED1_ON()   LED1_Clear()
 #define LED1_OFF()  LED1_Set()
 #define LED2_ON()   LED2_Clear()
 #define LED2_OFF()  LED2_Set()
 
-/* Simple delay */
+/* Timing */
 static void delay_ms(uint32_t ms) {
     volatile uint32_t count = ms * 800;
     while(count--);
 }
 
 /* ==========================================================================
-   UART Functions (SERCOM0 - PA08/PA09)
+   UART Functions
    ========================================================================== */
-static void UART_PutChar(char c) {
+static void putchar_uart(char c) {
     uint32_t timeout = 50000;
     while(!(SERCOM0_REGS->USART_INT.SERCOM_INTFLAG & SERCOM_USART_INT_INTFLAG_DRE_Msk)) {
         if(--timeout == 0) return;
@@ -45,348 +37,234 @@ static void UART_PutChar(char c) {
     SERCOM0_REGS->USART_INT.SERCOM_DATA = c;
 }
 
-static void UART_Print(const char* str) {
+static void print(const char* str) {
     while(*str) {
-        if(*str == '\n') UART_PutChar('\r');
-        UART_PutChar(*str++);
+        if(*str == '\n') putchar_uart('\r');
+        putchar_uart(*str++);
     }
 }
 
-static void UART_PrintDec(uint32_t val) {
+static void print_dec(uint32_t val) {
     char buf[12];
     int i = 0;
-    if(val == 0) { UART_PutChar('0'); return; }
-    while(val > 0) {
-        buf[i++] = '0' + (val % 10);
-        val /= 10;
-    }
-    while(i > 0) UART_PutChar(buf[--i]);
+    if(val == 0) { putchar_uart('0'); return; }
+    while(val > 0) { buf[i++] = '0' + (val % 10); val /= 10; }
+    while(i > 0) putchar_uart(buf[--i]);
 }
 
-static void UART_PrintHex8(uint8_t val) {
+static void print_hex8(uint8_t val) {
     const char hex[] = "0123456789ABCDEF";
-    UART_PutChar(hex[(val >> 4) & 0x0F]);
-    UART_PutChar(hex[val & 0x0F]);
+    putchar_uart('0'); putchar_uart('x');
+    putchar_uart(hex[(val >> 4) & 0x0F]);
+    putchar_uart(hex[val & 0x0F]);
 }
 
-static void UART_PrintHex16(uint16_t val) {
-    UART_PrintHex8((val >> 8) & 0xFF);
-    UART_PrintHex8(val & 0xFF);
+static void print_hex16(uint16_t val) {
+    const char hex[] = "0123456789ABCDEF";
+    putchar_uart('0'); putchar_uart('x');
+    putchar_uart(hex[(val >> 12) & 0x0F]);
+    putchar_uart(hex[(val >> 8) & 0x0F]);
+    putchar_uart(hex[(val >> 4) & 0x0F]);
+    putchar_uart(hex[val & 0x0F]);
 }
 
-static void UART_PrintBinary11(uint16_t val) {
+static void print_binary11(uint16_t val) {
     for(int i = 10; i >= 0; i--) {
-        UART_PutChar(((val >> i) & 1) ? '1' : '0');
-        if(i == 8 || i == 4) UART_PutChar(' ');
+        putchar_uart(((val >> i) & 1) ? '1' : '0');
     }
+}
+
+static void print_line(void) {
+    print("------------------------------------------------------------\n");
+}
+
+static void print_dline(void) {
+    print("============================================================\n");
 }
 
 /* ==========================================================================
    CAN Frame Structure
    ========================================================================== */
 typedef struct {
-    uint16_t id;        /* 11-bit Standard ID */
-    uint8_t  rtr;       /* Remote Transmission Request */
-    uint8_t  dlc;       /* Data Length Code (0-8) */
-    uint8_t  data[8];   /* Data bytes */
-    uint16_t crc;       /* 15-bit CRC */
-} CAN_Frame_t;
+    uint16_t id;
+    uint8_t  dlc;
+    uint8_t  data[8];
+    uint16_t crc;
+} CANFrame;
 
-/* Standard Automotive CAN Message IDs */
-#define CAN_ID_ENGINE_RPM       0x0C0
-#define CAN_ID_VEHICLE_SPEED    0x0D0
-#define CAN_ID_COOLANT_TEMP     0x0E0
-#define CAN_ID_THROTTLE_POS     0x0F0
-#define CAN_ID_BRAKE_STATUS     0x100
-#define CAN_ID_STEERING_ANGLE   0x110
-#define CAN_ID_AIRBAG_STATUS    0x620
-#define CAN_ID_OBD2_REQUEST     0x7DF
-#define CAN_ID_OBD2_RESPONSE    0x7E8
-
-/* ==========================================================================
-   CRC-15 Calculation (Real CAN Algorithm!)
-   ========================================================================== */
-static uint16_t CAN_CalculateCRC(CAN_Frame_t* frame) {
+/* CRC-15 Calculation (Real CAN algorithm) */
+static uint16_t calc_crc15(CANFrame* f) {
     uint16_t crc = 0;
-    const uint16_t polynomial = 0x4599;  /* CAN CRC polynomial */
+    const uint16_t poly = 0x4599;
     
-    /* Process ID bits */
     for(int i = 10; i >= 0; i--) {
-        uint8_t bit = (frame->id >> i) & 1;
-        uint8_t crc_nxt = bit ^ ((crc >> 14) & 1);
+        uint8_t bit = (f->id >> i) & 1;
+        uint8_t nxt = bit ^ ((crc >> 14) & 1);
         crc = (crc << 1) & 0x7FFF;
-        if(crc_nxt) crc ^= polynomial;
+        if(nxt) crc ^= poly;
     }
-    
-    /* Process DLC bits */
     for(int i = 3; i >= 0; i--) {
-        uint8_t bit = (frame->dlc >> i) & 1;
-        uint8_t crc_nxt = bit ^ ((crc >> 14) & 1);
+        uint8_t bit = (f->dlc >> i) & 1;
+        uint8_t nxt = bit ^ ((crc >> 14) & 1);
         crc = (crc << 1) & 0x7FFF;
-        if(crc_nxt) crc ^= polynomial;
+        if(nxt) crc ^= poly;
     }
-    
-    /* Process Data bits */
-    for(int b = 0; b < frame->dlc; b++) {
+    for(int b = 0; b < f->dlc; b++) {
         for(int i = 7; i >= 0; i--) {
-            uint8_t bit = (frame->data[b] >> i) & 1;
-            uint8_t crc_nxt = bit ^ ((crc >> 14) & 1);
+            uint8_t bit = (f->data[b] >> i) & 1;
+            uint8_t nxt = bit ^ ((crc >> 14) & 1);
             crc = (crc << 1) & 0x7FFF;
-            if(crc_nxt) crc ^= polynomial;
+            if(nxt) crc ^= poly;
         }
     }
-    
-    return crc & 0x7FFF;
+    return crc;
 }
 
 /* ==========================================================================
-   Vehicle Simulation
+   Vehicle Data
    ========================================================================== */
-typedef struct {
-    uint16_t rpm;
-    uint8_t  speed_kph;
-    int8_t   coolant_c;
-    uint8_t  throttle_pct;
-    uint8_t  brake_on;
-    int16_t  steering_deg;
-    uint8_t  gear;
-} Vehicle_t;
+static uint16_t g_rpm = 850;
+static uint8_t  g_speed = 0;
+static uint8_t  g_coolant = 45;
+static uint8_t  g_throttle = 0;
+static uint8_t  g_brake = 1;
 
-static Vehicle_t g_vehicle = {850, 0, 25, 0, 1, 0, 0};
-
-static void SimulateVehicle(void) {
-    static uint8_t state = 0;
-    static uint16_t counter = 0;
+static void update_vehicle(void) {
+    static uint8_t phase = 0;
+    static uint16_t tick = 0;
+    tick++;
     
-    counter++;
-    
-    switch(state) {
-        case 0: /* Warming up */
-            if(g_vehicle.coolant_c < 90) g_vehicle.coolant_c++;
-            g_vehicle.rpm = 900;
-            if(counter > 30) { state = 1; counter = 0; }
+    switch(phase) {
+        case 0: /* Idle */
+            g_rpm = 850;
+            g_throttle = 0;
+            g_brake = 1;
+            if(tick > 10) { phase = 1; tick = 0; }
             break;
-        case 1: /* Start driving */
-            g_vehicle.brake_on = 0;
-            g_vehicle.gear = 3;
-            if(g_vehicle.throttle_pct < 50) g_vehicle.throttle_pct += 5;
-            g_vehicle.rpm = 1000 + g_vehicle.throttle_pct * 40;
-            if(g_vehicle.speed_kph < 60) g_vehicle.speed_kph += 3;
-            g_vehicle.steering_deg = (counter % 20) - 10;
-            if(g_vehicle.speed_kph >= 60) { state = 2; counter = 0; }
+        case 1: /* Accelerate */
+            g_brake = 0;
+            if(g_throttle < 70) g_throttle += 10;
+            g_rpm = 1000 + g_throttle * 30;
+            if(g_speed < 80) g_speed += 5;
+            if(g_speed >= 80) { phase = 2; tick = 0; }
             break;
-        case 2: /* Cruising */
-            g_vehicle.throttle_pct = 30;
-            g_vehicle.rpm = 2500;
-            g_vehicle.steering_deg = (counter % 10) - 5;
-            if(counter > 40) { state = 3; counter = 0; }
+        case 2: /* Cruise */
+            g_throttle = 30;
+            g_rpm = 2200;
+            if(tick > 15) { phase = 3; tick = 0; }
             break;
-        case 3: /* Braking */
-            g_vehicle.throttle_pct = 0;
-            g_vehicle.brake_on = 1;
-            if(g_vehicle.rpm > 800) g_vehicle.rpm -= 150;
-            if(g_vehicle.speed_kph > 0) g_vehicle.speed_kph -= 4;
-            if(g_vehicle.speed_kph == 0) { state = 0; counter = 0; g_vehicle.gear = 0; }
+        case 3: /* Brake */
+            g_throttle = 0;
+            g_brake = 1;
+            if(g_rpm > 800) g_rpm -= 200;
+            if(g_speed > 0) g_speed -= 10;
+            if(g_speed == 0) { phase = 0; tick = 0; }
             break;
     }
+    
+    if(g_coolant < 90) g_coolant++;
 }
 
 /* ==========================================================================
-   Educational Display Functions
+   Display Functions
    ========================================================================== */
-static void PrintBanner(void) {
-    UART_Print("\n\n");
-    UART_Print("################################################################\n");
-    UART_Print("#                                                              #\n");
-    UART_Print("#       CAN Bus Protocol - Educational Demonstration           #\n");
-    UART_Print("#       PIC32CM3204GV00048 + ATA6561 Transceiver               #\n");
-    UART_Print("#                                                              #\n");
-    UART_Print("################################################################\n\n");
-    UART_Print("NOTE: This MCU has NO built-in CAN controller.\n");
-    UART_Print("      This is a SIMULATION for educational purposes.\n");
-    UART_Print("      For real CAN, add MCP2515 external controller.\n\n");
-}
-
-static void PrintLesson1_FrameStructure(void) {
-    UART_Print("================================================================\n");
-    UART_Print("  LESSON 1: CAN Frame Structure\n");
-    UART_Print("================================================================\n\n");
+static void show_can_frame(CANFrame* f, const char* name, const char* meaning) {
+    LED1_ON();
     
-    UART_Print("A Standard CAN 2.0A frame consists of:\n\n");
+    print("\n");
+    print_dline();
+    print("  TRANSMITTING: ");
+    print(name);
+    print("\n");
+    print_dline();
+    print("\n");
     
-    UART_Print("+-----+------------+---+---+---+-----+--------+-----+---+-----+\n");
-    UART_Print("| SOF |  ID (11b)  |RTR|IDE|r0 | DLC |  DATA  | CRC |ACK| EOF |\n");
-    UART_Print("+-----+------------+---+---+---+-----+--------+-----+---+-----+\n");
-    UART_Print("|  1  |     11     | 1 | 1 | 1 |  4  |  0-64  | 15  | 2 |  7  |\n");
-    UART_Print("+-----+------------+---+---+---+-----+--------+-----+---+-----+\n\n");
+    print("  CAN ID:     ");
+    print_hex16(f->id);
+    print("  (decimal: ");
+    print_dec(f->id);
+    print(")\n");
     
-    UART_Print("Field Descriptions:\n");
-    UART_Print("  SOF  - Start of Frame (1 dominant bit)\n");
-    UART_Print("  ID   - Message Identifier (11 bits, lower = higher priority)\n");
-    UART_Print("  RTR  - Remote Transmission Request (0=data, 1=remote)\n");
-    UART_Print("  IDE  - Identifier Extension (0=standard, 1=extended)\n");
-    UART_Print("  r0   - Reserved bit (must be dominant/0)\n");
-    UART_Print("  DLC  - Data Length Code (0-8 bytes)\n");
-    UART_Print("  DATA - Payload (0 to 8 bytes)\n");
-    UART_Print("  CRC  - Cyclic Redundancy Check (15 bits + delimiter)\n");
-    UART_Print("  ACK  - Acknowledge slot (2 bits)\n");
-    UART_Print("  EOF  - End of Frame (7 recessive bits)\n\n");
+    print("  Binary:     ");
+    print_binary11(f->id);
+    print("  (11-bit standard ID)\n");
     
-    delay_ms(3000);
-}
-
-static void PrintLesson2_BitTiming(void) {
-    UART_Print("================================================================\n");
-    UART_Print("  LESSON 2: CAN Bit Timing\n");
-    UART_Print("================================================================\n\n");
+    print("  DLC:        ");
+    print_dec(f->dlc);
+    print(" byte(s)\n");
     
-    UART_Print("Each CAN bit is divided into time segments:\n\n");
-    
-    UART_Print("  |<-------------- 1 Bit Time (tq * (1+PS1+PS2)) ------------->|\n");
-    UART_Print("  +------+------------------+---------+------------------------+\n");
-    UART_Print("  | SYNC |   PROP + PHASE1  | SAMPLE  |        PHASE2          |\n");
-    UART_Print("  +------+------------------+---------+------------------------+\n");
-    UART_Print("     1tq        1-8 tq         Point         1-8 tq\n\n");
-    
-    UART_Print("Common Baud Rates:\n");
-    UART_Print("  - 125 kbps  : Low-speed CAN (body electronics)\n");
-    UART_Print("  - 250 kbps  : J1939 trucks, agricultural equipment\n");
-    UART_Print("  - 500 kbps  : High-speed CAN (powertrain, chassis)\n");
-    UART_Print("  - 1 Mbps    : Maximum standard CAN speed\n\n");
-    
-    UART_Print("Example: 500kbps with 8MHz oscillator\n");
-    UART_Print("  Bit Time = 1/500000 = 2us\n");
-    UART_Print("  With 16 time quanta: tq = 125ns\n");
-    UART_Print("  BRP = 8MHz / (16 * 500kHz) - 1 = 0\n\n");
-    
-    delay_ms(3000);
-}
-
-static void PrintLesson3_Arbitration(void) {
-    UART_Print("================================================================\n");
-    UART_Print("  LESSON 3: CAN Bus Arbitration (CSMA/CD)\n");
-    UART_Print("================================================================\n\n");
-    
-    UART_Print("CAN uses non-destructive bitwise arbitration:\n\n");
-    
-    UART_Print("  Rule: DOMINANT (0) wins over RECESSIVE (1)\n\n");
-    
-    UART_Print("Example: Node A (ID=0x100) vs Node B (ID=0x200)\n\n");
-    
-    UART_Print("  Bit Position:  10   9   8   7   6   5   4   3   2   1   0\n");
-    UART_Print("                +---+---+---+---+---+---+---+---+---+---+---+\n");
-    UART_Print("  ID = 0x100:   | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | <- WINS!\n");
-    UART_Print("                +---+---+---+---+---+---+---+---+---+---+---+\n");
-    UART_Print("  ID = 0x200:   | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | <- loses\n");
-    UART_Print("                +---+---+---+---+---+---+---+---+---+---+---+\n");
-    UART_Print("                      ^ Node B sees dominant, backs off\n\n");
-    
-    UART_Print("  LOWER ID = HIGHER PRIORITY\n\n");
-    
-    UART_Print("  This is why critical messages (airbags, brakes)\n");
-    UART_Print("  have LOW IDs for guaranteed bus access!\n\n");
-    
-    delay_ms(3000);
-}
-
-static void PrintLesson4_AutomotiveIDs(void) {
-    UART_Print("================================================================\n");
-    UART_Print("  LESSON 4: Common Automotive CAN Message IDs\n");
-    UART_Print("================================================================\n\n");
-    
-    UART_Print("+--------+-------------------------+------------+-------------+\n");
-    UART_Print("|   ID   |      Description        |    Rate    |  Priority   |\n");
-    UART_Print("+--------+-------------------------+------------+-------------+\n");
-    UART_Print("| 0x0C0  | Engine RPM              |   10 ms    |    High     |\n");
-    UART_Print("| 0x0D0  | Vehicle Speed           |   20 ms    |    High     |\n");
-    UART_Print("| 0x0E0  | Coolant Temperature     |  100 ms    |   Medium    |\n");
-    UART_Print("| 0x0F0  | Throttle Position       |   10 ms    |    High     |\n");
-    UART_Print("| 0x100  | Brake Status            |   10 ms    |    High     |\n");
-    UART_Print("| 0x110  | Steering Angle          |   10 ms    |    High     |\n");
-    UART_Print("| 0x620  | Airbag Status           |  100 ms    |   Medium    |\n");
-    UART_Print("| 0x7DF  | OBD-II Request (all)    | On-demand  |    Low      |\n");
-    UART_Print("| 0x7E8  | OBD-II Response (ECM)   | On-demand  |    Low      |\n");
-    UART_Print("+--------+-------------------------+------------+-------------+\n\n");
-    
-    UART_Print("Note: Lower ID = Higher priority on the bus!\n\n");
-    
-    delay_ms(3000);
-}
-
-static void PrintCANFrame(CAN_Frame_t* frame, const char* desc) {
-    UART_Print("\n+------ CAN Frame: ");
-    UART_Print(desc);
-    UART_Print(" ------+\n");
-    
-    UART_Print("| ID:   0x");
-    UART_PrintHex16(frame->id);
-    UART_Print("  Binary: ");
-    UART_PrintBinary11(frame->id);
-    UART_Print("\n");
-    
-    UART_Print("| DLC:  ");
-    UART_PrintDec(frame->dlc);
-    UART_Print(" bytes\n");
-    
-    UART_Print("| Data: ");
-    for(int i = 0; i < frame->dlc; i++) {
-        UART_PrintHex8(frame->data[i]);
-        UART_PutChar(' ');
+    print("  Data:       ");
+    for(int i = 0; i < f->dlc; i++) {
+        print_hex8(f->data[i]);
+        if(i < f->dlc - 1) print(" ");
     }
-    UART_Print("\n");
+    print("\n");
     
-    UART_Print("| CRC:  0x");
-    UART_PrintHex16(frame->crc);
-    UART_Print("\n");
+    print("  CRC-15:     ");
+    print_hex16(f->crc);
+    print("\n\n");
     
-    UART_Print("+----------------------------------------+\n");
+    print("  MEANING:    ");
+    print(meaning);
+    print("\n");
+    
+    print_line();
+    
+    delay_ms(100);
+    LED1_OFF();
 }
 
-static void PrintDashboard(void) {
-    UART_Print("\n============= VEHICLE DASHBOARD =============\n");
+static void show_dashboard(void) {
+    LED2_ON();
     
-    /* RPM with bar graph */
-    UART_Print("  RPM:      ");
-    UART_PrintDec(g_vehicle.rpm);
-    UART_Print("  [");
-    int bars = g_vehicle.rpm / 500;
-    for(int i = 0; i < 16; i++) {
-         if(i < bars) {
-            UART_PutChar(i < 12 ? '=' : '!');
-         } else {
-            UART_PutChar('-');
-        }
+    print("\n");
+    print("+------------------[ DASHBOARD ]------------------+\n");
+    print("|                                                 |\n");
+    
+    /* RPM */
+    print("|  RPM:      ");
+    print_dec(g_rpm);
+    int spaces = 5 - (g_rpm >= 1000 ? 4 : (g_rpm >= 100 ? 3 : (g_rpm >= 10 ? 2 : 1)));
+    for(int i = 0; i < spaces; i++) putchar_uart(' ');
+    print("  [");
+    int bars = g_rpm / 400;
+    for(int i = 0; i < 20; i++) {
+        putchar_uart(i < bars ? (i < 15 ? '#' : '!') : '-');
     }
-    UART_Print("]\n");
+    print("]  |\n");
     
     /* Speed */
-    UART_Print("  Speed:    ");
-    UART_PrintDec(g_vehicle.speed_kph);
-    UART_Print(" km/h\n");
+    print("|  SPEED:    ");
+    print_dec(g_speed);
+    spaces = 5 - (g_speed >= 100 ? 3 : (g_speed >= 10 ? 2 : 1));
+    for(int i = 0; i < spaces; i++) putchar_uart(' ');
+    print(" km/h                       |\n");
     
     /* Coolant */
-    UART_Print("  Coolant:  ");
-    UART_PrintDec(g_vehicle.coolant_c);
-    UART_Print(" C ");
-    if(g_vehicle.coolant_c < 60) UART_Print("[COLD]");
-    else if(g_vehicle.coolant_c > 100) UART_Print("[HOT!]");
-    else UART_Print("[OK]");
-    UART_Print("\n");
+    print("|  COOLANT:  ");
+    print_dec(g_coolant);
+    spaces = 5 - (g_coolant >= 100 ? 3 : (g_coolant >= 10 ? 2 : 1));
+    for(int i = 0; i < spaces; i++) putchar_uart(' ');
+    print(" C   ");
+    if(g_coolant < 60) print("[WARMING UP]          ");
+    else if(g_coolant > 100) print("[OVERHEAT!]           ");
+    else print("[NORMAL]              ");
+    print("|\n");
     
-    /* Throttle */
-    UART_Print("  Throttle: ");
-    UART_PrintDec(g_vehicle.throttle_pct);
-    UART_Print(" %\n");
+    /* Throttle & Brake */
+    print("|  THROTTLE: ");
+    print_dec(g_throttle);
+    spaces = 5 - (g_throttle >= 100 ? 3 : (g_throttle >= 10 ? 2 : 1));
+    for(int i = 0; i < spaces; i++) putchar_uart(' ');
+    print(" %    BRAKE: ");
+    print(g_brake ? "ON " : "OFF");
+    print("                |\n");
     
-    /* Gear and Brake */
-    const char* gears[] = {"P", "R", "N", "D"};
-    UART_Print("  Gear: ");
-    UART_Print(gears[g_vehicle.gear]);
-    UART_Print("    Brake: ");
-    UART_Print(g_vehicle.brake_on ? "ON" : "OFF");
-    UART_Print("\n");
+    print("|                                                 |\n");
+    print("+-------------------------------------------------+\n");
     
-    UART_Print("==============================================\n");
+    delay_ms(100);
+    LED2_OFF();
 }
 
 /* ==========================================================================
@@ -395,103 +273,129 @@ static void PrintDashboard(void) {
 int main(void) {
     SYS_Initialize(NULL);
     
-    /* Startup LED animation */
-    for(int i = 0; i < 5; i++) {
-        LED1_ON(); LED2_OFF(); delay_ms(100);
-        LED1_OFF(); LED2_ON(); delay_ms(100);
+    /* Startup blink */
+    for(int i = 0; i < 3; i++) {
+        LED1_ON(); LED2_OFF(); delay_ms(150);
+        LED1_OFF(); LED2_ON(); delay_ms(150);
     }
     LED1_OFF(); LED2_OFF();
     
-    /* Print educational content */
-    PrintBanner();
-    delay_ms(2000);
+    /* Welcome message */
+    print("\n\n\n");
+    print_dline();
+    print("       CAN BUS PROTOCOL - EDUCATIONAL DEMO\n");
+    print_dline();
+    print("\n");
+    print("  This demo simulates a Vehicle ECU transmitting\n");
+    print("  CAN messages on an automotive network.\n");
+    print("\n");
+    print("  WHAT YOU WILL SEE:\n");
+    print("  - Each CAN frame with ID, Data, and CRC\n");
+    print("  - The meaning of the data being sent\n");
+    print("  - A dashboard showing decoded values\n");
+    print("\n");
+    print("  VEHICLE SIMULATION CYCLE:\n");
+    print("  1. Idle      -> Engine at 850 RPM, car stopped\n");
+    print("  2. Accelerate-> Throttle up, speed increases\n");
+    print("  3. Cruise    -> Steady 80 km/h at 2200 RPM\n");
+    print("  4. Brake     -> Slowing down to stop\n");
+    print("  (Cycle repeats)\n");
+    print("\n");
+    print("  NOTE: RPM = Engine revolutions, not wheel speed!\n");
+    print("        At idle, engine runs but car doesn't move.\n");
+    print("\n");
+    print("  LED INDICATORS:\n");
+    print("  - LED1 blinks = CAN frame transmitted\n");
+    print("  - LED2 blinks = Dashboard updated\n");
+    print("\n");
+    print_dline();
+    print("  Starting in 3 seconds...\n");
+    print_dline();
     
-    PrintLesson1_FrameStructure();
-    PrintLesson2_BitTiming();
-    PrintLesson3_Arbitration();
-    PrintLesson4_AutomotiveIDs();
+    delay_ms(3000);
     
-    UART_Print("\n################################################################\n");
-    UART_Print("#          LIVE VEHICLE CAN BUS SIMULATION                     #\n");
-    UART_Print("################################################################\n\n");
-    
-    /* Main simulation loop */
-    CAN_Frame_t frame;
+    /* Main loop */
+    CANFrame frame;
     uint32_t cycle = 0;
+    char meaning[80];
     
     while(1) {
-        cycle++;
-        SimulateVehicle();
+        update_vehicle();
         
-        /* Send different CAN messages in rotation */
-        switch(cycle % 6) {
+        switch(cycle % 4) {
             case 0: /* Engine RPM */
-                frame.id = CAN_ID_ENGINE_RPM;
+                frame.id = 0x0C0;
                 frame.dlc = 2;
-                frame.data[0] = (g_vehicle.rpm >> 8) & 0xFF;
-                frame.data[1] = g_vehicle.rpm & 0xFF;
-                frame.crc = CAN_CalculateCRC(&frame);
-                LED1_ON();
-                PrintCANFrame(&frame, "Engine RPM");
-                delay_ms(50);
-                LED1_OFF();
+                frame.data[0] = (g_rpm >> 8) & 0xFF;
+                frame.data[1] = g_rpm & 0xFF;
+                frame.crc = calc_crc15(&frame);
+                
+                print("\n\n");
+                print(">>> Sending ENGINE RPM data...\n");
+                
+                /* Build meaning string */
+                print("\n");
+                show_can_frame(&frame, "ENGINE RPM (ID: 0x0C0)", 
+                    "RPM = (Data[0] << 8) | Data[1]");
+                
+                print("  DECODED:    RPM = ");
+                print_dec(g_rpm);
+                print("\n");
                 break;
                 
             case 1: /* Vehicle Speed */
-                frame.id = CAN_ID_VEHICLE_SPEED;
+                frame.id = 0x0D0;
                 frame.dlc = 1;
-                frame.data[0] = g_vehicle.speed_kph;
-                frame.crc = CAN_CalculateCRC(&frame);
-                LED1_ON();
-                PrintCANFrame(&frame, "Vehicle Speed");
-                delay_ms(50);
-                LED1_OFF();
+                frame.data[0] = g_speed;
+                frame.crc = calc_crc15(&frame);
+                
+                print("\n\n");
+                print(">>> Sending VEHICLE SPEED data...\n");
+                
+                show_can_frame(&frame, "VEHICLE SPEED (ID: 0x0D0)",
+                    "Speed in km/h = Data[0]");
+                
+                print("  DECODED:    Speed = ");
+                print_dec(g_speed);
+                print(" km/h\n");
                 break;
                 
-            case 2: /* Coolant Temperature */
-                frame.id = CAN_ID_COOLANT_TEMP;
-                frame.dlc = 1;
-                frame.data[0] = (uint8_t)(g_vehicle.coolant_c + 40);
-                frame.crc = CAN_CalculateCRC(&frame);
-                LED1_ON();
-                PrintCANFrame(&frame, "Coolant Temp");
-                delay_ms(50);
-                LED1_OFF();
-                break;
-                
-            case 3: /* Throttle Position */
-                frame.id = CAN_ID_THROTTLE_POS;
+            case 2: /* Throttle & Brake */
+                frame.id = 0x0F0;
                 frame.dlc = 2;
-                frame.data[0] = g_vehicle.throttle_pct;
-                frame.data[1] = g_vehicle.brake_on;
-                frame.crc = CAN_CalculateCRC(&frame);
-                LED1_ON();
-                PrintCANFrame(&frame, "Throttle & Brake");
-                delay_ms(50);
-                LED1_OFF();
+                frame.data[0] = g_throttle;
+                frame.data[1] = g_brake;
+                frame.crc = calc_crc15(&frame);
+                
+                print("\n\n");
+                print(">>> Sending THROTTLE & BRAKE data...\n");
+                
+                show_can_frame(&frame, "THROTTLE & BRAKE (ID: 0x0F0)",
+                    "Throttle% = Data[0], Brake = Data[1]");
+                
+                print("  DECODED:    Throttle = ");
+                print_dec(g_throttle);
+                print("%, Brake = ");
+                print(g_brake ? "ON" : "OFF");
+                print("\n");
                 break;
                 
-            case 4: /* Steering Angle */
-                frame.id = CAN_ID_STEERING_ANGLE;
-                frame.dlc = 2;
-                frame.data[0] = (g_vehicle.steering_deg >> 8) & 0xFF;
-                frame.data[1] = g_vehicle.steering_deg & 0xFF;
-                frame.crc = CAN_CalculateCRC(&frame);
-                LED1_ON();
-                PrintCANFrame(&frame, "Steering Angle");
-                delay_ms(50);
-                LED1_OFF();
-                break;
+            case 3: /* Dashboard */
+                print("\n\n");
+                print(">>> Updating DASHBOARD with received data...\n");
+                show_dashboard();
                 
-            case 5: /* Dashboard update */
-                LED2_ON();
-                PrintDashboard();
-                delay_ms(50);
-                LED2_OFF();
+                print("\n");
+                print("  The dashboard above shows data DECODED from\n");
+                print("  the CAN messages sent by the Engine ECU.\n");
+                print("\n");
+                print("  In a real car, multiple ECUs communicate\n");
+                print("  this way over the CAN bus network.\n");
                 break;
         }
         
-        delay_ms(500);
+        cycle++;
+        delay_ms(2000);  /* 2 second pause between messages */
     }
     
     return EXIT_FAILURE;
