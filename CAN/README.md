@@ -7,6 +7,7 @@ This demo **simulates a Vehicle ECU** with interactive controls:
 - **Turn potentiometer** to control throttle
 - **Watch RGB LEDs** change color based on vehicle speed
 - **See CAN frames** being transmitted with full explanation
+- **OLED display** shows real-time dashboard (RPM, Speed, CAN data)
 
 ---
 
@@ -23,6 +24,7 @@ This demo **simulates a Vehicle ECU** with interactive controls:
 | **LED4** | PA11 | Brake light |
 | **RGB1 LED** | PB09/PA04/PA05 | RGB status (PWM1=Red, PWM2=Green, PWM3=Blue) |
 | **Buzzer** | PA14 | Audio feedback |
+| **OLED Display** | PA12/PA13 | SERCOM2 I2C SSD1306 128x64 |
 | **UART TX** | PA08 | Serial output |
 | **UART RX** | PA09 | Serial input |
 
@@ -124,6 +126,28 @@ Open **Pin Manager** → **Grid View** and configure each pin:
 | PA08 | SERCOM0_PAD0 (TX) |
 | PA09 | SERCOM0_PAD1 (RX) |
 
+#### OLED I2C (SERCOM2 I2C Master) ⚠️ CRITICAL
+
+1. In **Device Resources**, expand **Peripherals → SERCOM**
+2. Click **+** next to **SERCOM2**
+3. Configure SERCOM2 settings:
+
+| Setting | Value |
+|---------|-------|
+| Select SERCOM Operation Mode | **I2C Master** |
+| I2C Speed in KHz | 100 |
+| SDA Hold Time | 300-600ns hold time |
+| Enable operation in Standby mode | ☐ Unchecked |
+
+4. **CRITICAL - Pin Assignment in Pin Manager:**
+
+| Pin | Function | ⚠️ NOT GPIO! |
+|-----|----------|--------------|
+| PA12 | **SERCOM2_PAD0** | This is SDA |
+| PA13 | **SERCOM2_PAD1** | This is SCL |
+
+**⚠️ Common Mistake:** Do NOT set PA12/PA13 as "GPIO" with pull-ups! They MUST be assigned to **SERCOM2_PAD0** and **SERCOM2_PAD1** for I2C to work. If set as GPIO, the I2C peripheral cannot control the pins and will hang.
+
 ### Step 7: Generate Code
 1. Click the **Generate** button
 2. Wait for code generation to complete
@@ -164,6 +188,8 @@ Your MCC Pin Manager should look like this:
 | 10 | PA05 | PWM3 | GPIO | Digital | Out | Low | (RGB Blue)
 | 19 | PB10 | SW1 | GPIO | Digital | In | - |
 | 20 | PB11 | - | **Available** | - | - | - | ⚠️ Do NOT configure!
+| 21 | PA12 | - | SERCOM2_PAD0 | Digital | - | - | (OLED I2C SDA)
+| 22 | PA13 | - | SERCOM2_PAD1 | Digital | - | - | (OLED I2C SCL)
 | 23 | PA14 | Buzzer | GPIO | Digital | Out | Low |
 | 24 | PA15 | SW2 | GPIO | Digital | In | - |
 
@@ -182,17 +208,18 @@ When you power on, the demo runs a **hardware self-test**:
 
 Testing hardware...
   LED1-4:  OK
-  RGB LED: RED
-           GREEN
-           BLUE
-           OK
+  RGB1 LED test:
+    R->G->B OK
   Buzzer:  OK
   ADC:     45% OK
+  OLED:    Init...OLED_Init...CLS...Splash...OK
 
 Starting CAN simulation...
 ```
 
-All LEDs will flash, RGB cycles through colors, and buzzer beeps. Then the simulation begins.
+All LEDs will flash, RGB cycles through colors, OLED shows "MICROCHIP CAN DEMO" splash, and buzzer beeps. Then the simulation begins.
+
+**If OLED hangs:** Check that PA12/PA13 are configured as **SERCOM2_PAD0/PAD1**, not GPIO!
 
 ### Controls
 
@@ -223,6 +250,25 @@ All LEDs will flash, RGB cycles through colors, and buzzer beeps. Then the simul
 | 🔵 **Blue** | Slow (1-20 km/h) |
 | ⚪ **White** | Stopped/Idle (0 km/h) |
 
+### OLED Display (128x64)
+
+The OLED shows real-time vehicle data in a professional dashboard layout:
+
+```
++----------------------+
+|   CAN BUS MONITOR    |   <- Title
+|----------------------|
+| RPM:  2200           |   <- Engine RPM (large font)
+|----------------------|
+| SPD: 80km/h THR: 45% |   <- Speed & Throttle
+| BRAKE [Released]     |   <- Brake status
+|----------------------|
+| CAN:0C0 D:08 A0      |   <- CAN ID & Data bytes
++----------------------+
+```
+
+The display updates every 2 seconds alongside the terminal output.
+
 ### Buzzer Feedback
 
 | Sound | Meaning |
@@ -237,30 +283,38 @@ All LEDs will flash, RGB cycles through colors, and buzzer beeps. Then the simul
 Connect to serial port at **115200 baud** to see:
 
 ```
-╔══════════════════════════════════════════════════════════╗
-║        CAN BUS EDUCATIONAL DEMO - VEHICLE SIMULATOR      ║
-╠══════════════════════════════════════════════════════════╣
-║                                                          ║
-║  HOW TO USE:                                             ║
-║  ┌─────────┬────────────────────────────────────────┐    ║
-║  │ SW1     │ HOLD to ACCELERATE (increase speed)    │    ║
-║  │ SW2     │ HOLD to BRAKE (decrease speed)         │    ║
-║  │ POT     │ TURN to set THROTTLE level             │    ║
-║  └─────────┴────────────────────────────────────────┘    ║
-║                                                          ║
-╠══════════════════════════════════════════════════════════╣
-║  CURRENT STATUS:                                         ║
-║                                                          ║
-║  SW1: □ released     SW2: □ released                     ║
-║  POT Throttle: 45%                                       ║
-║                                                          ║
-║  ┌────────────────────────────────────────────────────┐  ║
-║  │  ENGINE RPM:    2200                               │  ║
-║  │  SPEED:         80  km/h                           │  ║
-║  │  BRAKE:         OFF                                │  ║
-║  │  MODE:          [AUTO DEMO]                        │  ║
-║  └────────────────────────────────────────────────────┘  ║
-╚══════════════════════════════════════════════════════════╝
+============================================================
+           CAN BUS PROTOCOL - EDUCATIONAL SIMULATION
+============================================================
+
+CONTROLS:
+  [SW1] Hold = ACCELERATE    [SW2] Hold = BRAKE
+  [POT] Turn = Set throttle level (0-100%)
+
+------------------------------------------------------------
+VEHICLE STATUS:
+
+  Engine RPM:     2200
+  Speed:          80  km/h
+  Throttle:       45  %
+  Brake:          Released
+  Mode:           AUTO SIMULATION
+
+  SW1: ---        SW2: ---
+
+------------------------------------------------------------
+CAN FRAME TRANSMITTED:
+
+  Message:        ENGINE_RPM
+  CAN ID:         0x0C0
+  Data Length:    2 bytes
+  Data Bytes:     0x08 0x98
+  CRC-15:         0x1234
+
+  Formula:        RPM = (Data[0] << 8) | Data[1]
+  Calculation:    RPM = (8 x 256) + 152 = 2200
+
+============================================================
 ```
 
 ---
@@ -287,6 +341,27 @@ Any GPIO configuration on PB11 causes the WS2812B to receive invalid data and li
 1. In MCC, set PB11 to **Available** (not GPIO)
 2. Regenerate code
 3. Erase and reflash the board
+
+### "OLED display not working" / "Initialization hangs"
+
+**Most Common Issue - Wrong Pin Configuration:**
+1. In MCC Pin Manager, PA12 and PA13 must be set to:
+   - PA12 → **SERCOM2_PAD0** (NOT GPIO!)
+   - PA13 → **SERCOM2_PAD1** (NOT GPIO!)
+2. If they show as "GPIO" with pull-ups, this is WRONG - change to SERCOM2
+
+**Hardware Connections:**
+| OLED Pin | Board Connection |
+|----------|------------------|
+| GND | GND |
+| VDD | 3.3V |
+| SCL | PA13 (Pin 22) |
+| SDA | PA12 (Pin 21) |
+
+**Other Checks:**
+- OLED address should be **0x3C** (standard for 4-pin modules)
+- Terminal shows debug: `OLED: Init...OLED_Init...CLS...Splash...OK`
+- If it hangs at "Init..." or "OLED_Init...", check pin configuration above
 
 ### "No serial output"
 1. Check COM port - must be **MCP2221** port
@@ -316,23 +391,24 @@ For real CAN, add an external **MCP2515** CAN controller via SPI.
 ## Quick Reference Card
 
 ```
-┌────────────────────────────────────────────────┐
-│           INTERACTIVE CAN DEMO                 │
-├────────────────────────────────────────────────┤
-│  SW1 (PB10)  │ HOLD = Accelerate               │
-│  SW2 (PA15)  │ HOLD = Brake                    │
-│  POT (PA03)  │ TURN = Throttle 0-100%          │
-├────────────────────────────────────────────────┤
-│  LED1 (PA00) │ CAN TX indicator                │
-│  LED2 (PA01) │ Dashboard indicator             │
-│  LED3 (PA10) │ Engine warning                  │
-│  LED4 (PA11) │ Brake light                     │
-├────────────────────────────────────────────────┤
-│  RGB1 LED    │ Speed-based color (PWM1/2/3)    │
-│  Buzzer(PA14)│ Audio feedback                  │
-├────────────────────────────────────────────────┤
-│  UART: PA08/PA09 @ 115200 baud                 │
-└────────────────────────────────────────────────┘
++------------------------------------------------+
+|           INTERACTIVE CAN DEMO                 |
++------------------------------------------------+
+|  SW1 (PB10)  | HOLD = Accelerate               |
+|  SW2 (PA15)  | HOLD = Brake                    |
+|  POT (PA03)  | TURN = Throttle 0-100%          |
++------------------------------------------------+
+|  LED1 (PA00) | CAN TX indicator                |
+|  LED2 (PA01) | Dashboard indicator             |
+|  LED3 (PA10) | Engine warning                  |
+|  LED4 (PA11) | Brake light                     |
++------------------------------------------------+
+|  RGB1 LED    | Speed-based color (PWM1/2/3)    |
+|  Buzzer(PA14)| Audio feedback                  |
+|  OLED        | 128x64 Dashboard (PA12/PA13)    |
++------------------------------------------------+
+|  UART: PA08/PA09 @ 115200 baud                 |
++------------------------------------------------+
 ```
 
 ---

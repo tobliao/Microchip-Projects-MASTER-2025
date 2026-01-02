@@ -15,8 +15,8 @@ Pin Number,Pin ID,Custom Name,Function,Mode, Direction,Latch,Pull Up,Pull Down,D
 16,PA11,LED4,GPIO,Digital,Out,Low,,,NORMAL
 19,PB10,SW1,GPIO,Digital,In,n/a,Yes,No,NORMAL
 20,PB11,,Available,,,,,,NORMAL
-21,PA12,,Available,,,,,,NORMAL
-22,PA13,,Available,,,,,,NORMAL
+21,PA12,,SERCOM2_PAD0,Digital,In,n/a,Yes,No,NORMAL
+22,PA13,,SERCOM2_PAD1,Digital,In,n/a,Yes,No,NORMAL
 23,PA14,Buzzer,GPIO,Digital,Out,Low,,,NORMAL
 24,PA15,SW2,GPIO,Digital,In,n/a,Yes,No,NORMAL
 25,PA16,,SERCOM1_PAD0,Digital,High Impedance,n/a,No,No,NORMAL

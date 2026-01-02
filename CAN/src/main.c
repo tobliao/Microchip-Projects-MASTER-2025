@@ -3,14 +3,16 @@
  * 
  * Hardware: PIC32CM3204GV00048 on APP-MASTERS25-1 board
  * UART: SERCOM0 (PA08=TX, PA09=RX) @ 115200 baud
+ * OLED: SERCOM2 I2C (PA12=SDA, PA13=SCL) @ 100 kHz
  ******************************************************************************/
 
- #include <stddef.h>
- #include <stdbool.h>
- #include <stdlib.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <stdint.h>
- #include "definitions.h"
- 
+#include <string.h>
+#include "definitions.h"
+
 /* Configuration */
 #define CPU_FREQ   8000000UL
 
@@ -37,7 +39,125 @@ static void delay_ms(uint32_t ms) {
     for(uint32_t i = 0; i < ms; i++) delay_us(1000);
 }
 
-/* UART */
+/*******************************************************************************
+ * FORWARD DECLARATIONS
+ ******************************************************************************/
+static void print(const char* s);
+static void println(const char* s);
+
+/*******************************************************************************
+ * I2C INTERFACE - Using MCC-generated SERCOM2 I2C Master driver
+ ******************************************************************************/
+/* Legacy variable - kept for OLED library compatibility (not actively used) */
+volatile bool bIsI2C_DONE __attribute__((unused)) = false;
+
+/*******************************************************************************
+ * OLED DISPLAY INTERFACE
+ ******************************************************************************/
+#include "OLED128x64.h"
+#define OLED_STANDALONE 1
+#include "OLED128x64.c"  /* Include source directly since not in Makefile */
+
+static char oled_buf[24];  /* String buffer for OLED */
+
+static void int_to_str(int32_t val, char* buf, int width) {
+    int len = 0;
+    int neg = 0;
+    char temp[12];
+    
+    if(val < 0) { neg = 1; val = -val; }
+    if(val == 0) { temp[len++] = '0'; }
+    else { while(val > 0) { temp[len++] = '0' + (val % 10); val /= 10; } }
+    
+    int pad = width - len - neg;
+    int i = 0;
+    while(pad-- > 0) buf[i++] = ' ';
+    if(neg) buf[i++] = '-';
+    while(len > 0) buf[i++] = temp[--len];
+    buf[i] = '\0';
+}
+
+static void hex_to_str(uint16_t val, char* buf, int digits) {
+    const char hex[] = "0123456789ABCDEF";
+    for(int i = digits - 1; i >= 0; i--) {
+        buf[digits - 1 - i] = hex[(val >> (i * 4)) & 0xF];
+    }
+    buf[digits] = '\0';
+}
+
+/* Update OLED with current vehicle/CAN data */
+static void oled_update_display(uint16_t rpm_val, uint8_t speed_val, uint8_t throttle_val, 
+                                 bool brake_on, uint16_t can_id, uint8_t dlc, uint8_t* data) {
+    /* Line 0 (y=0): Title */
+    OLED_Put6x8Str(16, 0, (const uint8_t*)"CAN BUS MONITOR");
+    
+    /* Line 1 (y=1): Horizontal line */
+    OLED_Put6x8Str(0, 1, (const uint8_t*)"--------------------");
+    
+    /* Line 2-3 (y=2): RPM - large font */
+    OLED_Put6x8Str(0, 2, (const uint8_t*)"RPM:");
+    int_to_str(rpm_val, oled_buf, 5);
+    OLED_Put8x16Str(30, 2, (const uint8_t*)oled_buf);
+    
+    /* Line 4 (y=4): Speed */
+    OLED_Put6x8Str(0, 4, (const uint8_t*)"SPD:");
+    int_to_str(speed_val, oled_buf, 3);
+    strcat(oled_buf, "km/h");
+    OLED_Put6x8Str(30, 4, (const uint8_t*)oled_buf);
+    
+    /* Line 4: Throttle (right side) */
+    OLED_Put6x8Str(78, 4, (const uint8_t*)"THR:");
+    int_to_str(throttle_val, oled_buf, 3);
+    strcat(oled_buf, "%");
+    OLED_Put6x8Str(102, 4, (const uint8_t*)oled_buf);
+    
+    /* Line 5 (y=5): Brake status */
+    if(brake_on)
+        OLED_Put6x8Str(0, 5, (const uint8_t*)"BRAKE [ENGAGED]   ");
+    else
+        OLED_Put6x8Str(0, 5, (const uint8_t*)"BRAKE [Released]  ");
+    
+    /* Line 6 (y=6): CAN Frame Info */
+    OLED_Put6x8Str(0, 6, (const uint8_t*)"CAN:");
+    hex_to_str(can_id, oled_buf, 3);
+    OLED_Put6x8Str(30, 6, (const uint8_t*)oled_buf);
+    
+    OLED_Put6x8Str(54, 6, (const uint8_t*)"D:");
+    /* Show first 3 bytes of data */
+    for(int i = 0; i < dlc && i < 3; i++) {
+        hex_to_str(data[i], oled_buf, 2);
+        OLED_Put6x8Str(66 + i * 18, 6, (const uint8_t*)oled_buf);
+    }
+    
+    /* Line 7 (y=7): Status bar */
+    OLED_Put6x8Str(0, 7, (const uint8_t*)"--------------------");
+}
+
+/* Initialize OLED with splash screen */
+static void oled_init_display(void) {
+    /* SERCOM2 I2C is initialized by SYS_Initialize() */
+    print("Init...");
+    delay_ms(100);  /* Wait for OLED power stabilization */
+    
+    print("OLED_Init...");
+    OLED_Init();
+    print("CLS...");
+    OLED_CLS();
+    delay_ms(10);
+    
+    print("Splash...");
+    /* Splash screen */
+    OLED_Put8x16Str(8, 1, (const uint8_t*)"MICROCHIP");
+    OLED_Put8x16Str(8, 3, (const uint8_t*)"CAN DEMO");
+    OLED_Put6x8Str(22, 6, (const uint8_t*)"PIC32CM3204GV");
+    delay_ms(1500);
+    
+    OLED_CLS();
+}
+
+/*******************************************************************************
+ * UART FUNCTIONS
+ ******************************************************************************/
 static void uart_putc(char c) {
     uint32_t timeout = 50000;
     while(!(SERCOM0_REGS->USART_INT.SERCOM_INTFLAG & SERCOM_USART_INT_INTFLAG_DRE_Msk)) {
@@ -76,14 +196,9 @@ static void print_pad(int32_t v, int width) {
 
 static void clear(void) { print("\033[2J\033[H"); }
 
-/* 
- * RGB1 LED (Common Cathode) - controlled via 3 GPIO pins
- * RED   = PB09 (PWM1) - Pin 8
- * GREEN = PA04 (PWM2) - Pin 9  
- * BLUE  = PA05 (PWM3) - Pin 10
- * 
- * HIGH = ON, LOW = OFF (common cathode to GND)
- */
+/*******************************************************************************
+ * RGB1 LED (Common Cathode)
+ ******************************************************************************/
 #define RGB_RED_PIN   (1U << 9U)   /* PB09 */
 #define RGB_GREEN_PIN (1U << 4U)   /* PA04 */
 #define RGB_BLUE_PIN  (1U << 5U)   /* PA05 */
@@ -96,37 +211,27 @@ static void clear(void) { print("\033[2J\033[H"); }
 #define RGB_BLUE_OFF()  PORT_REGS->GROUP[0].PORT_OUTCLR = RGB_BLUE_PIN
 
 static void rgb_init(void) {
-    /* Set all RGB pins as output */
     PORT_REGS->GROUP[1].PORT_DIRSET = RGB_RED_PIN;
     PORT_REGS->GROUP[0].PORT_DIRSET = RGB_GREEN_PIN | RGB_BLUE_PIN;
-    /* Start with all OFF */
-    RGB_RED_OFF();
-    RGB_GREEN_OFF();
-    RGB_BLUE_OFF();
-    
-    /* WS2812B (PB11) - DO NOT TOUCH - leave as high-impedance input */
-    /* Any toggling of PB11 causes WS2812B to light up white */
+    RGB_RED_OFF(); RGB_GREEN_OFF(); RGB_BLUE_OFF();
 }
 
-/* Set RGB color - simple on/off control */
-
-/* Named color functions for easy use */
 static void rgb_off(void)     { RGB_RED_OFF(); RGB_GREEN_OFF(); RGB_BLUE_OFF(); }
 static void rgb_red(void)     { RGB_RED_ON();  RGB_GREEN_OFF(); RGB_BLUE_OFF(); }
 static void rgb_green(void)   { RGB_RED_OFF(); RGB_GREEN_ON();  RGB_BLUE_OFF(); }
 static void rgb_blue(void)    { RGB_RED_OFF(); RGB_GREEN_OFF(); RGB_BLUE_ON();  }
 static void rgb_yellow(void)  { RGB_RED_ON();  RGB_GREEN_ON();  RGB_BLUE_OFF(); }
 static void rgb_cyan(void)    { RGB_RED_OFF(); RGB_GREEN_ON();  RGB_BLUE_ON();  }
-static void rgb_magenta(void) { RGB_RED_ON();  RGB_GREEN_OFF(); RGB_BLUE_ON();  }
 static void rgb_white(void)   { RGB_RED_ON();  RGB_GREEN_ON();  RGB_BLUE_ON();  }
 
-/* Buzzer */
+/*******************************************************************************
+ * BUZZER & ADC
+ ******************************************************************************/
 static void beep(uint16_t freq, uint16_t ms) {
     uint32_t half = 500000/freq, cycles = (uint32_t)freq*ms/1000;
     for(uint32_t i=0; i<cycles; i++) { BUZZER_ON(); delay_us(half); BUZZER_OFF(); delay_us(half); }
 }
 
-/* ADC */
 static uint8_t read_pot(void) {
     ADC_ChannelSelect(ADC_POSINPUT_PIN1, ADC_NEGINPUT_GND);
     ADC_ConversionStart();
@@ -134,27 +239,29 @@ static uint8_t read_pot(void) {
     return (uint8_t)((uint32_t)ADC_ConversionResultGet() * 100 / 4095);
 }
 
-/* Buttons - SW1=PB10, SW2=PA15 (from MCC Pin Manager) */
+/*******************************************************************************
+ * BUTTONS - SW1=PB10, SW2=PA15
+ ******************************************************************************/
 static void btn_init(void) {
-    /* SW1 = PB10 (Row 19 in MCC) */
     PORT_REGS->GROUP[1].PORT_DIRCLR = (1U << 10U);
     PORT_REGS->GROUP[1].PORT_PINCFG[10] = PORT_PINCFG_INEN_Msk | PORT_PINCFG_PULLEN_Msk;
     PORT_REGS->GROUP[1].PORT_OUTSET = (1U << 10U);
-    /* SW2 = PA15 (Row 24 in MCC) */
     PORT_REGS->GROUP[0].PORT_DIRCLR = (1U << 15U);
     PORT_REGS->GROUP[0].PORT_PINCFG[15] = PORT_PINCFG_INEN_Msk | PORT_PINCFG_PULLEN_Msk;
     PORT_REGS->GROUP[0].PORT_OUTSET = (1U << 15U);
 }
 
-static bool sw1(void) { return ((PORT_REGS->GROUP[1].PORT_IN >> 10U) & 1U) == 0; } /* PB10 */
-static bool sw2(void) { return ((PORT_REGS->GROUP[0].PORT_IN >> 15U) & 1U) == 0; } /* PA15 */
+static bool sw1(void) { return ((PORT_REGS->GROUP[1].PORT_IN >> 10U) & 1U) == 0; }
+static bool sw2(void) { return ((PORT_REGS->GROUP[0].PORT_IN >> 15U) & 1U) == 0; }
 
-/* Vehicle State */
+/*******************************************************************************
+ * VEHICLE STATE
+ ******************************************************************************/
 static uint16_t rpm = 850;
 static uint8_t speed = 0, throttle = 0;
 static bool brake = false, manual = false;
 
-/* CRC-15 */
+/* CRC-15 for CAN */
 static uint16_t crc15(uint16_t id, uint8_t dlc, uint8_t* data) {
     uint16_t crc = 0;
     for(int i=10; i>=0; i--) { uint8_t n = ((id>>i)&1)^((crc>>14)&1); crc = (crc<<1)&0x7FFF; if(n) crc^=0x4599; }
@@ -163,7 +270,7 @@ static uint16_t crc15(uint16_t id, uint8_t dlc, uint8_t* data) {
     return crc;
 }
 
-/* Update Vehicle */
+/* Update Vehicle State */
 static void update(void) {
     bool s1 = sw1(), s2 = sw2();
     throttle = read_pot();
@@ -171,22 +278,19 @@ static void update(void) {
     if(s1 || s2) manual = true;
     
     if(s1 && !s2) {
-        /* Accelerating */
         brake = false; LED4_OFF();
         if(rpm < 6000) rpm += 100;
         if(speed < 180) speed += 3;
     } else if(s2 && !s1) {
-        /* Braking */
         brake = true; LED4_ON();
         if(rpm > 800) rpm -= 150;
         if(speed > 0) speed -= 5; else speed = 0;
     } else {
-        /* Coasting */
         brake = false; LED4_OFF();
         if(manual) {
             if(throttle > 20) { rpm = 800 + throttle*40; if(speed < throttle) speed++; }
             else { if(rpm > 800) rpm -= 30; if(speed > 0) speed--; }
-     } else {
+        } else {
             static uint8_t ph=0; static uint16_t t=0; t++;
             if(ph==0) { rpm=850; speed=0; throttle=0; if(t>5) {ph=1;t=0;} }
             else if(ph==1) { if(throttle<70) throttle+=10; rpm=1000+throttle*30; if(speed<80) speed+=5; if(speed>=80) {ph=2;t=0;} }
@@ -196,15 +300,17 @@ static void update(void) {
     }
     
     /* RGB1 LED - Speed-based colors */
-    if(brake)          rgb_red();      /* Red = Braking */
-    else if(speed>100) rgb_yellow();   /* Yellow = High speed (>100 km/h) */
-    else if(speed>60)  rgb_green();    /* Green = Cruising (60-100 km/h) */
-    else if(speed>20)  rgb_cyan();     /* Cyan = Medium (20-60 km/h) */
-    else if(speed>0)   rgb_blue();     /* Blue = Slow (1-20 km/h) */
-    else               rgb_white();    /* White = Stopped/Idle */
+    if(brake)          rgb_red();
+    else if(speed>100) rgb_yellow();
+    else if(speed>60)  rgb_green();
+    else if(speed>20)  rgb_cyan();
+    else if(speed>0)   rgb_blue();
+    else               rgb_white();
 }
 
-/* Display */
+/*******************************************************************************
+ * TERMINAL DISPLAY FUNCTIONS
+ ******************************************************************************/
 static void show_title(void) {
     println("");
     println("============================================================");
@@ -257,12 +363,14 @@ static void show_can(uint16_t id, const char* name, uint8_t dlc, uint8_t* data) 
     LED1_OFF();
 }
 
-/* Main */
+/*******************************************************************************
+ * MAIN FUNCTION
+ ******************************************************************************/
 int main(void) {
     SYS_Initialize(NULL);
     btn_init();
     ADC_Enable();
-    rgb_init();  /* Initialize RGB1 LED (PWM1/2/3) */
+    rgb_init();
     
     /* Startup */
     clear();
@@ -278,22 +386,21 @@ int main(void) {
     LED3_ON(); delay_ms(100); LED3_OFF();
     LED4_ON(); delay_ms(100); LED4_OFF(); println("OK");
     
-    println("  RGB1 LED test (PWM1/2/3):");
-    print("    OFF... ");   rgb_off();     delay_ms(500); println("OK");
-    print("    RED... ");   rgb_red();     delay_ms(500); println("OK");
-    print("    GREEN... "); rgb_green();   delay_ms(500); println("OK");
-    print("    BLUE... ");  rgb_blue();    delay_ms(500); println("OK");
-    print("    YELLOW... ");rgb_yellow();  delay_ms(500); println("OK");
-    print("    CYAN... ");  rgb_cyan();    delay_ms(500); println("OK");
-    print("    MAGENTA..."); rgb_magenta(); delay_ms(500); println("OK");
-    print("    WHITE... "); rgb_white();   delay_ms(500); println("OK");
-    rgb_off();
-    println("  RGB test complete!");
+    println("  RGB1 LED test:");
+    rgb_red(); delay_ms(300);
+    rgb_green(); delay_ms(300);
+    rgb_blue(); delay_ms(300);
+    rgb_off(); println("    R->G->B OK");
     
     print("  Buzzer:  "); beep(1000, 100); println("OK");
     print("  ADC:     "); print_int(read_pot()); println("% OK");
-    println("");
     
+    /* Initialize OLED Display */
+    print("  OLED:    ");
+    oled_init_display();
+    println("OK");
+    
+    println("");
     println("Starting CAN simulation...");
     beep(1000,100); delay_ms(50); beep(1500,100); delay_ms(50); beep(2000,150);
     delay_ms(1000);
@@ -301,6 +408,7 @@ int main(void) {
     /* Main Loop */
     uint8_t msg = 0;
     uint8_t data[8];
+    uint16_t current_can_id = 0x0C0;
     
     while(1) {
         update();
@@ -313,45 +421,47 @@ int main(void) {
             case 0: /* RPM */
                 data[0] = (rpm >> 8) & 0xFF;
                 data[1] = rpm & 0xFF;
+                current_can_id = 0x0C0;
                 show_can(0x0C0, "ENGINE_RPM", 2, data);
                 
                 print("  Formula:        RPM = (Data[0] << 8) | Data[1]\n");
                 print("  Calculation:    RPM = (");
-                print_int(data[0]);
-                print(" x 256) + ");
-                print_int(data[1]);
-                print(" = ");
-                print_int(rpm);
-                println("");
+                print_int(data[0]); print(" x 256) + ");
+                print_int(data[1]); print(" = ");
+                print_int(rpm); println("");
                 println("");
                 break;
                 
             case 1: /* Speed */
                 data[0] = speed;
+                current_can_id = 0x0D0;
                 show_can(0x0D0, "VEHICLE_SPEED", 1, data);
                 
                 print("  Formula:        Speed = Data[0]\n");
                 print("  Calculation:    Speed = ");
-                print_int(speed);
-                println(" km/h");
+                print_int(speed); println(" km/h");
                 println("");
                 break;
                 
             case 2: /* Throttle/Brake */
                 data[0] = throttle;
                 data[1] = brake ? 1 : 0;
+                current_can_id = 0x0F0;
                 show_can(0x0F0, "THROTTLE_BRAKE", 2, data);
                 
                 println("  Formula:        Throttle = Data[0], Brake = Data[1]");
                 print("  Calculation:    Throttle = ");
-                print_int(throttle);
-                print("%, Brake = ");
+                print_int(throttle); print("%, Brake = ");
                 println(brake ? "ON (1)" : "OFF (0)");
                 println("");
                 break;
         }
         
         println("============================================================");
+        
+        /* Update OLED Display */
+        oled_update_display(rpm, speed, throttle, brake, current_can_id, 
+                           (msg == 1) ? 1 : 2, data);
         
         msg++;
         if(msg > 2) msg = 0;
@@ -360,5 +470,4 @@ int main(void) {
     }
     
     return 0;
- }
- 
+}
