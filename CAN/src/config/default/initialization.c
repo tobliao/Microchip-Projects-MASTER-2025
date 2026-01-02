@@ -174,6 +174,7 @@ void SYS_Initialize ( void* data )
 
     SERCOM0_USART_Initialize();
 
+    ADC_Initialize();
 
     NVIC_Initialize();
 

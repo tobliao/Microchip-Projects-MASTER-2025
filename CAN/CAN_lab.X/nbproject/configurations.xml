@@ -7,6 +7,10 @@
       <logicalFolder name="config" displayName="config" projectFiles="true">
         <logicalFolder name="default" displayName="default" projectFiles="true">
           <logicalFolder name="peripheral" displayName="peripheral" projectFiles="true">
+            <logicalFolder name="adc" displayName="adc" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/adc/plib_adc_common.h</itemPath>
+              <itemPath>../src/config/default/peripheral/adc/plib_adc.h</itemPath>
+            </logicalFolder>
             <logicalFolder name="clock" displayName="clock" projectFiles="true">
               <itemPath>../src/config/default/peripheral/clock/plib_clock.h</itemPath>
             </logicalFolder>
@@ -135,6 +139,7 @@
           <itemPath>CAN_lab_default/components/cmsis.yml</itemPath>
           <itemPath>CAN_lab_default/components/sercom0.yml</itemPath>
           <itemPath>CAN_lab_default/components/stdio.yml</itemPath>
+          <itemPath>CAN_lab_default/components/adc.yml</itemPath>
           <itemPath>CAN_lab_default/components/evsys.yml</itemPath>
           <itemPath>CAN_lab_default/components/nvmctrl.yml</itemPath>
           <itemPath>CAN_lab_default/components/dfp.yml</itemPath>
@@ -164,6 +169,9 @@
       <logicalFolder name="config" displayName="config" projectFiles="true">
         <logicalFolder name="default" displayName="default" projectFiles="true">
           <logicalFolder name="peripheral" displayName="peripheral" projectFiles="true">
+            <logicalFolder name="adc" displayName="adc" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/adc/plib_adc.c</itemPath>
+            </logicalFolder>
             <logicalFolder name="clock" displayName="clock" projectFiles="true">
               <itemPath>../src/config/default/peripheral/clock/plib_clock.c</itemPath>
             </logicalFolder>
@@ -454,6 +462,8 @@
                   value="${memories.instruction.ram.ranges}"/>
         <property key="memories.programmemory" value="true"/>
         <property key="memories.programmemory.ranges" value="0-7fff"/>
+        <property key="programmerToGoFilePath"
+                  value="/Users/tobliao/MPLABXProjects/CAN/CAN_lab.X/debug/default/CAN_lab_ptg"/>
         <property key="programoptions.donoteraseauxmem" value="false"/>
         <property key="programoptions.eraseb4program" value="true"/>
         <property key="programoptions.pgmentry.voltage" value="low"/>

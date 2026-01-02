@@ -67,7 +67,9 @@ build/default/production/_ext/1171490990/initialization.o: \
  ../src/config/default/peripheral/sercom/usart/plib_sercom_usart_common.h \
  ../src/config/default/peripheral/port/plib_port.h \
  ../src/config/default/peripheral/clock/plib_clock.h \
- ../src/config/default/peripheral/nvic/plib_nvic.h
+ ../src/config/default/peripheral/nvic/plib_nvic.h \
+ ../src/config/default/peripheral/adc/plib_adc.h \
+ ../src/config/default/peripheral/adc/plib_adc_common.h
 ../src/config/default/definitions.h:
 ../src/config/default/peripheral/nvmctrl/plib_nvmctrl.h:
 ../src/config/default/device.h:
@@ -137,3 +139,5 @@ build/default/production/_ext/1171490990/initialization.o: \
 ../src/config/default/peripheral/port/plib_port.h:
 ../src/config/default/peripheral/clock/plib_clock.h:
 ../src/config/default/peripheral/nvic/plib_nvic.h:
+../src/config/default/peripheral/adc/plib_adc.h:
+../src/config/default/peripheral/adc/plib_adc_common.h:

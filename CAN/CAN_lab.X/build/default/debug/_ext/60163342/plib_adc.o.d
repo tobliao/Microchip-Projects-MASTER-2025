@@ -1,8 +1,6 @@
-build/default/production/_ext/504274921/plib_sercom3_usart.o: \
- ../src/config/default/peripheral/sercom/usart/plib_sercom3_usart.c \
- ../src/config/default/interrupts.h \
- ../src/config/default/peripheral/sercom/usart/plib_sercom3_usart.h \
- ../src/config/default/peripheral/sercom/usart/plib_sercom_usart_common.h \
+build/default/debug/_ext/60163342/plib_adc.o: \
+ ../src/config/default/peripheral/adc/plib_adc.c \
+ ../src/config/default/peripheral/adc/plib_adc.h \
  ../src/config/default/device.h \
  ../src/packs/PIC32CM3204GV00048_DFP/pic32cm3204gv00048.h \
  ../src/packs/CMSIS/CMSIS/Core/Include/core_cm0plus.h \
@@ -60,10 +58,10 @@ build/default/production/_ext/504274921/plib_sercom3_usart.o: \
  ../src/packs/PIC32CM3204GV00048_DFP/pio/pic32cm3204gv00048.h \
  ../src/config/default/device_cache.h ../src/config/default/device.h \
  ../src/config/default/toolchain_specifics.h \
- ../src/packs/CMSIS/CMSIS/Core/Include/cmsis_compiler.h
-../src/config/default/interrupts.h:
-../src/config/default/peripheral/sercom/usart/plib_sercom3_usart.h:
-../src/config/default/peripheral/sercom/usart/plib_sercom_usart_common.h:
+ ../src/packs/CMSIS/CMSIS/Core/Include/cmsis_compiler.h \
+ ../src/config/default/peripheral/adc/plib_adc_common.h \
+ ../src/config/default/interrupts.h
+../src/config/default/peripheral/adc/plib_adc.h:
 ../src/config/default/device.h:
 ../src/packs/PIC32CM3204GV00048_DFP/pic32cm3204gv00048.h:
 ../src/packs/CMSIS/CMSIS/Core/Include/core_cm0plus.h:
@@ -123,3 +121,5 @@ build/default/production/_ext/504274921/plib_sercom3_usart.o: \
 ../src/config/default/device.h:
 ../src/config/default/toolchain_specifics.h:
 ../src/packs/CMSIS/CMSIS/Core/Include/cmsis_compiler.h:
+../src/config/default/peripheral/adc/plib_adc_common.h:
+../src/config/default/interrupts.h:

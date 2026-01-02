@@ -2,23 +2,23 @@ Pin Number,Pin ID,Custom Name,Function,Mode, Direction,Latch,Pull Up,Pull Down,D
 1,PA00,LED1,GPIO,Digital,Out,Low,,,NORMAL
 2,PA01,LED2,GPIO,Digital,Out,Low,,,NORMAL
 3,PA02,,Available,,,,,,NORMAL
-4,PA03,,Available,,,,,,NORMAL
+4,PA03,Potentiometer,ADC_AIN1,Analog,High Impedance,n/a,,,NORMAL
 7,PB08,,Available,,,,,,NORMAL
-8,PB09,,Available,,,,,,NORMAL
-9,PA04,,Available,,,,,,NORMAL
-10,PA05,,Available,,,,,,NORMAL
+8,PB09,PWM1,GPIO,Digital,Out,Low,,,NORMAL
+9,PA04,PWM2,GPIO,Digital,Out,Low,,,NORMAL
+10,PA05,PWM3,GPIO,Digital,Out,Low,,,NORMAL
 11,PA06,,Available,,,,,,NORMAL
 12,PA07,,Available,,,,,,NORMAL
 13,PA08,,SERCOM0_PAD0,Digital,High Impedance,n/a,No,No,NORMAL
 14,PA09,,SERCOM0_PAD1,Digital,High Impedance,n/a,No,No,NORMAL
-15,PA10,,Available,,,,,,NORMAL
-16,PA11,,Available,,,,,,NORMAL
-19,PB10,,Available,,,,,,NORMAL
+15,PA10,LED3,GPIO,Digital,Out,Low,,,NORMAL
+16,PA11,LED4,GPIO,Digital,Out,Low,,,NORMAL
+19,PB10,SW1,GPIO,Digital,In,n/a,Yes,No,NORMAL
 20,PB11,,Available,,,,,,NORMAL
 21,PA12,,Available,,,,,,NORMAL
 22,PA13,,Available,,,,,,NORMAL
-23,PA14,,Available,,,,,,NORMAL
-24,PA15,,Available,,,,,,NORMAL
+23,PA14,Buzzer,GPIO,Digital,Out,Low,,,NORMAL
+24,PA15,SW2,GPIO,Digital,In,n/a,Yes,No,NORMAL
 25,PA16,,SERCOM1_PAD0,Digital,High Impedance,n/a,No,No,NORMAL
 26,PA17,,SERCOM1_PAD1,Digital,High Impedance,n/a,No,No,NORMAL
 27,PA18,CAN_CS,GPIO,Digital,Out,High,,,NORMAL

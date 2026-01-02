@@ -1,36 +1,34 @@
-# CAN Bus Protocol
+# Interactive CAN Bus Protocol - Educational Demo
 
 ## What This Demo Does
 
-This demo **simulates a Vehicle ECU** (Engine Control Unit) sending CAN messages on an automotive network. You will see:
-
-1. **Real CAN frame structure** - ID, Data bytes, CRC checksum
-2. **Data encoding/decoding** - How sensor values become CAN data
-3. **Live dashboard** - Decoded values displayed like a real instrument cluster
-
----
-
-## Quick Start Guide
-
-### Step 1: Connect Hardware
-- Connect USB cable to the APP-MASTERS25-1 board
-- Board powers on, LEDs may briefly light up
-
-### Step 2: Open Terminal
-- Open **MPLAB Data Visualizer** (or any serial terminal)
-- Select COM port: **MCP2221** (e.g., `tty.usbmodem1101`)
-- Settings: **115200 baud, 8-N-1**
-- Click **Connect**
-
-### Step 3: Reset the Board
-- Press the **RESET** button on the board
-- You should see the welcome message appear
+This demo **simulates a Vehicle ECU** with interactive controls:
+- **Press buttons** to accelerate (SW1) and brake (SW2)
+- **Turn potentiometer** to control throttle
+- **Watch RGB LEDs** change color based on vehicle speed
+- **See CAN frames** being transmitted with full explanation
 
 ---
 
-## MCC Melody Configuration (For New Projects)
+## Hardware Features
 
-If you are creating this project from scratch, follow these steps to configure MCC Melody.
+| Component | MCU Pin | Function |
+|-----------|---------|----------|
+| **SW1** | PB10 | Accelerate button (hold to speed up) |
+| **SW2** | PA15 | Brake button (hold to slow down) |
+| **Potentiometer** | PA03 | Throttle control (ADC input) |
+| **LED1** | PA00 | CAN TX indicator |
+| **LED2** | PA01 | Dashboard indicator |
+| **LED3** | PA10 | Engine warning |
+| **LED4** | PA11 | Brake light |
+| **RGB1 LED** | PB09/PA04/PA05 | RGB status (PWM1=Red, PWM2=Green, PWM3=Blue) |
+| **Buzzer** | PA14 | Audio feedback |
+| **UART TX** | PA08 | Serial output |
+| **UART RX** | PA09 | Serial input |
+
+---
+
+## MCC Melody Configuration (Step-by-Step)
 
 ### Step 1: Create New Project
 1. Open **MPLAB X IDE**
@@ -46,365 +44,297 @@ If you are creating this project from scratch, follow these steps to configure M
 3. Wait for MCC to load completely
 
 ### Step 3: Configure System Clock
-
-**Purpose:** Use internal 8MHz oscillator for stable operation (no external crystal needed)
-
 1. Click **Clock Configuration** in Resource Management
-2. Set the following:
+2. Set:
+   - **OSC8M**: Enable ✓
+   - **GCLK Generator 0 Source**: OSC8M
+   - **GCLK Generator 0 Divider**: 1
 
-| Setting | Value | Why |
-|---------|-------|-----|
-| **OSC8M** | Enable ✓ | Internal 8MHz oscillator |
-| **GCLK Generator 0 Source** | OSC8M | Main CPU clock |
-| **GCLK Generator 0 Divider** | 1 | Run at full 8MHz |
+### Step 4: Add UART (SERCOM0)
+1. In **Device Resources**, expand **Peripherals → SERCOM**
+2. Click **+** next to **SERCOM0**
+3. Configure:
 
-**Important:** Do NOT enable XOSC (external crystal) unless you have one on your board.
+| Setting | Value |
+|---------|-------|
+| Operating Mode | USART Internal Clock |
+| Baud Rate | 115200 |
+| Character Size | 8 bits |
+| Parity | None |
+| Stop Bits | 1 |
+| Transmit Pinout (TXPO) | PAD[0] |
+| Receive Pinout (RXPO) | PAD[1] |
 
-### Step 4: Configure UART (SERCOM0)
+### Step 5: Add ADC (for Potentiometer)
+1. In **Device Resources**, expand **Peripherals → ADC**
+2. Click **+** next to **ADC**
+3. Configure:
 
-**Purpose:** Serial communication with PC via onboard MCP2221 USB-UART chip
+| Setting | Value |
+|---------|-------|
+| Reference | VDDANA |
+| Prescaler | DIV64 |
+| Resolution | 12-bit |
 
-1. In **Device Resources** panel, expand **Peripherals → SERCOM**
-2. Click **+** next to **SERCOM0** to add it
-3. Configure SERCOM0:
+### Step 6: Configure All GPIO Pins
 
-| Setting | Value | Why |
-|---------|-------|-----|
-| **Operating Mode** | USART Internal Clock | Async serial |
-| **Baud Rate** | 115200 | Standard terminal speed |
-| **Character Size** | 8 bits | Standard |
-| **Parity** | None | No parity check |
-| **Stop Bits** | 1 | Standard |
-| **Transmit Pinout (TXPO)** | PAD[0] | TX on PA08 |
-| **Receive Pinout (RXPO)** | PAD[1] | RX on PA09 |
+Open **Pin Manager** → **Grid View** and configure each pin:
 
-**Why SERCOM0?** The MCP2221 chip on the board is wired to PA08/PA09, which are SERCOM0 pins.
+#### LEDs (GPIO Output)
+| Pin | Custom Name | Function | Direction | Initial State |
+|-----|-------------|----------|-----------|---------------|
+| PA00 | LED1 | GPIO | Output | Low |
+| PA01 | LED2 | GPIO | Output | Low |
+| PA10 | LED3 | GPIO | Output | Low |
+| PA11 | LED4 | GPIO | Output | Low |
 
-### Step 5: Configure GPIO (LEDs)
+#### Buttons (GPIO Input)
+| Pin | Custom Name | Function | Direction | Pull Up |
+|-----|-------------|----------|-----------|---------|
+| PB10 | SW1 | GPIO | Input | ✓ Enable |
+| PA15 | SW2 | GPIO | Input | ✓ Enable |
 
-**Purpose:** Visual indicators for CAN activity
+**Important for Buttons:** In the pin settings, make sure:
+- Direction = **Input**
+- **Input Enable (INEN):** when you set Direction to "In", the Input Enable (INEN) is automatically enabled.
+- **Pull Up Enable** = Checked ✓
 
-1. Open **Pin Manager** → Grid View
-2. Find PA00 and PA01, set both as **GPIO Output**
-3. In **Pin Settings**:
+#### RGB1 LED (Common Cathode)
+| Pin | Custom Name | Function | Direction | Initial State | Color |
+|-----|-------------|----------|-----------|---------------|-------|
+| PB09 | PWM1 | GPIO | Output | Low | RED |
+| PA04 | PWM2 | GPIO | Output | Low | GREEN |
+| PA05 | PWM3 | GPIO | Output | Low | BLUE |
 
-| Pin | Custom Name | Direction | Initial State |
-|-----|-------------|-----------|---------------|
-| PA00 | LED1 | Output | High |
-| PA01 | LED2 | Output | High |
-| PA08 | (auto) | SERCOM0_PAD0 | - |
-| PA09 | (auto) | SERCOM0_PAD1 | - |
+**Note:** RGB1 is a common-cathode LED. HIGH = ON, LOW = OFF.
 
-**Why High initial state?** LEDs are active-low, so High = OFF at startup.
+#### Buzzer
+| Pin | Custom Name | Function | Direction | Initial State |
+|-----|-------------|----------|-----------|---------------|
+| PA14 | Buzzer | GPIO | Output | Low |
 
-### Step 6: Add STDIO (Optional)
+#### Potentiometer (ADC)
+| Pin | Custom Name | Function | Mode |
+|-----|-------------|----------|------|
+| PA03 | Potentiometer | ADC_AIN1 | Analog |
 
-**Purpose:** Enable `printf()` function to work with UART
-
-1. In **Device Resources**, find **STDIO**
-2. Click **+** to add it
-3. In STDIO settings, link it to **SERCOM0**
+#### UART (Auto-configured with SERCOM0)
+| Pin | Function |
+|-----|----------|
+| PA08 | SERCOM0_PAD0 (TX) |
+| PA09 | SERCOM0_PAD1 (RX) |
 
 ### Step 7: Generate Code
-
 1. Click the **Generate** button
 2. Wait for code generation to complete
 3. Close MCC
 
 ### Step 8: Verify Clock Configuration (CRITICAL!)
+After generating, check `src/config/default/peripheral/clock/plib_clock.c`:
 
-After generating code, check that the clock won't hang:
-
-1. Open `src/config/default/peripheral/clock/plib_clock.c`
-2. Find the `SYSCTRL_Initialize()` function
-3. Look for this dangerous line:
-   ```c
-   while(!(SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_XOSCRDY_Msk));
-   ```
-4. **If present, COMMENT IT OUT** - this waits forever for external crystal:
+Look for this line and **comment it out** if present:
    ```c
    // while(!(SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_XOSCRDY_Msk));
    ```
 
-### Step 9: Build and Flash
+This prevents the MCU from hanging if no external crystal is present.
 
+### Step 9: Build and Flash
 1. Click **Build** (hammer icon)
 2. Verify no errors
-3. Click **Run** (play icon) to flash the board
-4. Open terminal and press RESET to see output
+3. Click **Run** (play icon) to flash
 
 ---
 
-## What You Will See
+## Pin Configuration Summary (Screenshot Reference)
 
-### Phase 1: Welcome Screen (appears immediately after reset)
+Your MCC Pin Manager should look like this:
 
-```
-============================================================
-       CAN BUS PROTOCOL - EDUCATIONAL DEMO
-============================================================
+| Pin # | Pin ID | Custom Name | Function | Mode | Direction | Latch |
+|-------|--------|-------------|----------|------|-----------|-------|
+| 1 | PA00 | LED1 | GPIO | Digital | Out | Low |
+| 2 | PA01 | LED2 | GPIO | Digital | Out | Low |
+| 4 | PA03 | Potentiometer | ADC_AIN1 | Analog | - | - |
+| 13 | PA08 | - | SERCOM0_PAD0 | Digital | - | - |
+| 14 | PA09 | - | SERCOM0_PAD1 | Digital | - | - |
+| 15 | PA10 | LED3 | GPIO | Digital | Out | Low |
+| 16 | PA11 | LED4 | GPIO | Digital | Out | Low |
+| 8  | PB09 | PWM1 | GPIO | Digital | Out | Low | (RGB Red)
+| 9  | PA04 | PWM2 | GPIO | Digital | Out | Low | (RGB Green)
+| 10 | PA05 | PWM3 | GPIO | Digital | Out | Low | (RGB Blue)
+| 19 | PB10 | SW1 | GPIO | Digital | In | - |
+| 20 | PB11 | - | **Available** | - | - | - | ⚠️ Do NOT configure!
+| 23 | PA14 | Buzzer | GPIO | Digital | Out | Low |
+| 24 | PA15 | SW2 | GPIO | Digital | In | - |
 
-  This demo simulates a Vehicle ECU transmitting
-  CAN messages on an automotive network.
-
-  WHAT YOU WILL SEE:
-  - Each CAN frame with ID, Data, and CRC
-  - The meaning of the data being sent
-  - A dashboard showing decoded values
-
-  VEHICLE SIMULATION CYCLE:
-  1. Idle      -> Engine at 850 RPM, stopped
-  2. Accelerate-> Throttle up, speed increases
-  3. Cruise    -> Steady 80 km/h at 2200 RPM
-  4. Brake     -> Slowing down to stop
-  (Cycle repeats)
-
-  LED INDICATORS:
-  - LED1 blinks = CAN frame transmitted
-  - LED2 blinks = Dashboard updated
-
-============================================================
-  Starting in 3 seconds...
-============================================================
-```
-
-**What's happening:** The MCU initializes and explains what the demo will show.
+**⚠️ Important:** Leave **PB11 (Pin 20)** as "Available" - do NOT configure it as GPIO. Any configuration on PB11 will cause the WS2812B LEDs to light up bright white.
 
 ---
 
-### Phase 2: CAN Frame Transmission (repeats every 2 seconds)
+## How to Use the Demo
 
-Each cycle shows a different CAN message:
-
-#### Message 1: Engine RPM
+### Startup Sequence
+When you power on, the demo runs a **hardware self-test**:
 ```
->>> Sending ENGINE RPM data...
+========================================
+        SYSTEM INITIALIZATION
+========================================
 
-============================================================
-  TRANSMITTING: ENGINE RPM (ID: 0x0C0)
-============================================================
+Testing hardware...
+  LED1-4:  OK
+  RGB LED: RED
+           GREEN
+           BLUE
+           OK
+  Buzzer:  OK
+  ADC:     45% OK
 
-  CAN ID:     0x00C0  (decimal: 192)
-  Binary:     00011000000  (11-bit standard ID)
-  DLC:        2 byte(s)
-  Data:       0x03 0x52
-  CRC-15:     0x1A3F
-
-  MEANING:    RPM = (Data[0] << 8) | Data[1]
-
-------------------------------------------------------------
-  DECODED:    RPM = 850
+Starting CAN simulation...
 ```
 
-**What's happening:** 
-- The "ECU" is sending engine RPM as a 2-byte value
-- `0x03 0x52` = (3 × 256) + 82 = 850 RPM
-- LED1 blinks when this frame is "transmitted"
+All LEDs will flash, RGB cycles through colors, and buzzer beeps. Then the simulation begins.
 
-#### Message 2: Vehicle Speed
-```
->>> Sending VEHICLE SPEED data...
+### Controls
 
-============================================================
-  TRANSMITTING: VEHICLE SPEED (ID: 0x0D0)
-============================================================
+| Control | Action | Effect |
+|---------|--------|--------|
+| **SW1** | **HOLD** | Accelerate - RPM↑, Speed↑ |
+| **SW2** | **HOLD** | Brake - RPM↓, Speed↓ |
+| **Potentiometer** | **TURN** | Set throttle level (0-100%) |
+| **Release both** | - | Coast (speed gradually decreases) |
 
-  CAN ID:     0x00D0  (decimal: 208)
-  Binary:     00011010000  (11-bit standard ID)
-  DLC:        1 byte(s)
-  Data:       0x00
-  CRC-15:     0x2B1C
+### LED Indicators
 
-  MEANING:    Speed in km/h = Data[0]
+| LED | Color | Meaning |
+|-----|-------|---------|
+| **LED1** | Red | CAN frame transmitted (blinks) |
+| **LED2** | Red | Dashboard updated (blinks) |
+| **LED3** | Red | Engine warning (if RPM > 5500) |
+| **LED4** | Red | Brake engaged |
 
-------------------------------------------------------------
-  DECODED:    Speed = 0 km/h
-```
+### RGB1 LED Colors
 
-**What's happening:**
-- Speed is sent as a single byte (0-255 km/h range)
-- Data `0x00` = 0 km/h (vehicle stopped)
+| Color | Vehicle State |
+|-------|---------------|
+| 🔴 **Red** | Braking (SW2 held) |
+| 🟡 **Yellow** | High speed (>100 km/h) |
+| 🟢 **Green** | Cruising (60-100 km/h) |
+| 🩵 **Cyan** | Medium speed (20-60 km/h) |
+| 🔵 **Blue** | Slow (1-20 km/h) |
+| ⚪ **White** | Stopped/Idle (0 km/h) |
 
-#### Message 3: Throttle & Brake
-```
->>> Sending THROTTLE & BRAKE data...
+### Buzzer Feedback
 
-============================================================
-  TRANSMITTING: THROTTLE & BRAKE (ID: 0x0F0)
-============================================================
-
-  CAN ID:     0x00F0  (decimal: 240)
-  Binary:     00011110000  (11-bit standard ID)
-  DLC:        2 byte(s)
-  Data:       0x00 0x01
-  CRC-15:     0x3D7E
-
-  MEANING:    Throttle% = Data[0], Brake = Data[1]
-
-------------------------------------------------------------
-  DECODED:    Throttle = 0%, Brake = ON
-```
-
-**What's happening:**
-- Two values packed into one CAN message
-- Data[0] = Throttle percentage (0-100)
-- Data[1] = Brake status (0=OFF, 1=ON)
+| Sound | Meaning |
+|-------|---------|
+| Short beep | Button pressed |
+| Triple ascending | Startup complete |
 
 ---
 
-### Phase 3: Dashboard Update
+## Terminal Output
+
+Connect to serial port at **115200 baud** to see:
 
 ```
->>> Updating DASHBOARD with received data...
-
-+------------------[ DASHBOARD ]------------------+
-|                                                 |
-|  RPM:      850    [##------------------]        |
-|  SPEED:    0      km/h                          |
-|  COOLANT:  45     C   [WARMING UP]              |
-|  THROTTLE: 0      %    BRAKE: ON                |
-|                                                 |
-+-------------------------------------------------+
-
-  The dashboard above shows data DECODED from
-  the CAN messages sent by the Engine ECU.
-
-  In a real car, multiple ECUs communicate
-  this way over the CAN bus network.
+╔══════════════════════════════════════════════════════════╗
+║        CAN BUS EDUCATIONAL DEMO - VEHICLE SIMULATOR      ║
+╠══════════════════════════════════════════════════════════╣
+║                                                          ║
+║  HOW TO USE:                                             ║
+║  ┌─────────┬────────────────────────────────────────┐    ║
+║  │ SW1     │ HOLD to ACCELERATE (increase speed)    │    ║
+║  │ SW2     │ HOLD to BRAKE (decrease speed)         │    ║
+║  │ POT     │ TURN to set THROTTLE level             │    ║
+║  └─────────┴────────────────────────────────────────┘    ║
+║                                                          ║
+╠══════════════════════════════════════════════════════════╣
+║  CURRENT STATUS:                                         ║
+║                                                          ║
+║  SW1: □ released     SW2: □ released                     ║
+║  POT Throttle: 45%                                       ║
+║                                                          ║
+║  ┌────────────────────────────────────────────────────┐  ║
+║  │  ENGINE RPM:    2200                               │  ║
+║  │  SPEED:         80  km/h                           │  ║
+║  │  BRAKE:         OFF                                │  ║
+║  │  MODE:          [AUTO DEMO]                        │  ║
+║  └────────────────────────────────────────────────────┘  ║
+╚══════════════════════════════════════════════════════════╝
 ```
-
-**What's happening:**
-- LED2 blinks when dashboard updates
-- All previously sent CAN data is displayed as human-readable values
-- This simulates how an instrument cluster decodes CAN messages
 
 ---
 
-## Vehicle Simulation Cycle
+## Troubleshooting
 
-The simulated vehicle goes through these states automatically:
+### "Buttons don't work"
+1. Check MCC Pin Settings for SW1 (PB10) and SW2 (PA15):
+   - Direction = **Input**
+   - **Input Enable** = ✓ Checked
+   - **Pull Up** = ✓ Checked
+2. Regenerate code after changes
+3. Watch the startup button test - it shows real-time button state
 
-| State | Duration | RPM | Speed | Throttle | Brake | What's Simulated |
-|-------|----------|-----|-------|----------|-------|------------------|
-| **Idle** | ~20 sec | 850 | 0 | 0% | ON | Car stopped, engine running |
-| **Accelerate** | ~16 sec | 850→3100 | 0→80 | 0%→70% | OFF | Driver pressing gas pedal |
-| **Cruise** | ~30 sec | 2200 | 80 | 30% | OFF | Steady highway driving |
-| **Brake** | ~16 sec | 2200→800 | 80→0 | 0% | ON | Slowing to a stop |
+### "RGB1 LED doesn't change color"
+1. Verify PB09 (PWM1), PA04 (PWM2), PA05 (PWM3) are configured as GPIO Output in MCC
+2. Check that the RGB1 LED (CLX6F-FKC) is properly connected
+3. Each color pin should show HIGH when active (common cathode LED)
 
-The cycle then repeats from Idle.
+### "WS2812B LEDs are bright white"
+⚠️ **Do NOT configure PB11 (Pin 20)** - leave it as "Available" in MCC!
 
-### Understanding RPM vs Speed
+Any GPIO configuration on PB11 causes the WS2812B to receive invalid data and light up white. The solution:
+1. In MCC, set PB11 to **Available** (not GPIO)
+2. Regenerate code
+3. Erase and reflash the board
 
-**RPM = Engine Revolutions Per Minute** (not wheel/tire rotations!)
+### "No serial output"
+1. Check COM port - must be **MCP2221** port
+2. Baud rate must be **115200**
+3. Press RESET button on board
 
-| Question | Answer |
-|----------|--------|
-| Why RPM=850 but Speed=0? | Engine is **idling** - running but not moving the car |
-| When does this happen? | Car in Park, or stopped at a red light |
-| How does engine power reach wheels? | Through the **transmission** (gearbox) |
-
-```
-Engine (RPM) ──→ Transmission ──→ Wheels ──→ Speed (km/h)
-                     │
-            In Park/Neutral: disconnected
-            In Drive: connected via gears
-```
-
-**Real-world example:** Your car in the driveway with engine running and gear in Park:
-- Engine RPM: ~800 (you hear it running)
-- Speed: 0 km/h (car doesn't move)
-- Fuel is being consumed, but no motion is produced
-
----
-
-## LED Behavior
-
-| LED | Trigger | Meaning |
-|-----|---------|---------|
-| **LED1** | Brief flash | A CAN frame was "transmitted" |
-| **LED2** | Brief flash | Dashboard display updated |
-| **Both alternate** | At startup | System initializing |
-
----
-
-## Understanding CAN Frame Fields
-
-Each transmitted frame shows these fields:
-
-| Field | Example | Explanation |
-|-------|---------|-------------|
-| **CAN ID** | `0x00C0` | 11-bit message identifier. Lower ID = higher priority |
-| **Binary** | `00011000000` | The ID shown as bits (sent on the bus this way) |
-| **DLC** | `2` | Data Length Code - how many data bytes follow |
-| **Data** | `0x03 0x52` | The actual payload (sensor values encoded) |
-| **CRC-15** | `0x1A3F` | Error detection checksum (calculated automatically) |
-
----
-
-## Standard Automotive CAN IDs Used
-
-| ID | Message | Priority | Why This ID? |
-|----|---------|----------|--------------|
-| `0x0C0` | Engine RPM | High | Low ID = critical engine data |
-| `0x0D0` | Vehicle Speed | High | Safety-related (ABS, stability) |
-| `0x0F0` | Throttle/Brake | High | Safety-related (collision avoidance) |
-
-**Key Concept:** Lower CAN ID = Higher Priority
-
-In a real car with multiple ECUs transmitting simultaneously, the message with the **lowest ID wins** the bus arbitration and transmits first.
+### "LEDs always ON or not working"
+1. LEDs are **active-low** on this board
+2. Low = LED ON, High = LED OFF
+3. Check Initial State in pin configuration
 
 ---
 
 ## Hardware Notes
 
 ### Why This is a Simulation
+The **PIC32CM3204GV00048** does **NOT** have a built-in CAN controller.
 
-The **PIC32CM3204GV00048** MCU does **NOT** have a built-in CAN controller. The board has:
+The board has:
+- ✅ **ATA6561** - CAN Transceiver (converts digital ↔ differential)
+- ❌ **No CAN Controller** - Cannot generate real CAN frames
 
-- ✅ **ATA6561** - CAN Transceiver (converts digital ↔ differential signals)
-- ❌ **No CAN Controller** - Cannot generate/parse CAN frames in hardware
-
-To add real CAN functionality, you would need an external **MCP2515** CAN controller module connected via SPI.
-
-### Pin Assignments
-
-| Function | MCU Pin | Notes |
-|----------|---------|-------|
-| UART TX | PA08 | To MCP2221 (USB-Serial) |
-| UART RX | PA09 | From MCP2221 |
-| LED1 | PA00 | TX indicator (active-low) |
-| LED2 | PA01 | Dashboard indicator (active-low) |
+For real CAN, add an external **MCP2515** CAN controller via SPI.
 
 ---
 
-## Troubleshooting
+## Quick Reference Card
 
-### "I don't see any output"
-
-1. **Check COM port** - Must be the MCP2221 port, not the debugger
-2. **Check baud rate** - Must be exactly **115200**
-3. **Press RESET** - The welcome message only appears once at startup
-
-### "LEDs are always ON"
-
-1. **Clock issue** - The MCU may be stuck waiting for an external crystal
-2. **Fix**: Open `src/config/default/peripheral/clock/plib_clock.c` and comment out any XOSC wait loops
-
-### "Output looks garbled"
-
-1. **Baud rate mismatch** - Verify terminal is set to 115200
-2. **Try a different terminal** - Some terminals handle line endings differently
-
----
-
-## Next Steps
-
-After understanding this simulation, you can:
-
-1. **Modify the code** - Change CAN IDs, add new messages
-2. **Add MCP2515** - Connect external CAN controller for real CAN
-3. **Connect to real vehicle** - Use OBD-II adapter to read actual car data
+```
+┌────────────────────────────────────────────────┐
+│           INTERACTIVE CAN DEMO                 │
+├────────────────────────────────────────────────┤
+│  SW1 (PB10)  │ HOLD = Accelerate               │
+│  SW2 (PA15)  │ HOLD = Brake                    │
+│  POT (PA03)  │ TURN = Throttle 0-100%          │
+├────────────────────────────────────────────────┤
+│  LED1 (PA00) │ CAN TX indicator                │
+│  LED2 (PA01) │ Dashboard indicator             │
+│  LED3 (PA10) │ Engine warning                  │
+│  LED4 (PA11) │ Brake light                     │
+├────────────────────────────────────────────────┤
+│  RGB1 LED    │ Speed-based color (PWM1/2/3)    │
+│  Buzzer(PA14)│ Audio feedback                  │
+├────────────────────────────────────────────────┤
+│  UART: PA08/PA09 @ 115200 baud                 │
+└────────────────────────────────────────────────┘
+```
 
 ---
 
-*Hardware: PIC32CM3204GV00048 + ATA6561 | UART: SERCOM0 @ 115200 baud*
+*Hardware: PIC32CM3204GV00048 on APP-MASTERS25-1 board*
