@@ -1,9 +1,19 @@
 /*******************************************************************************
- * INTERACTIVE CAN Protocol Educational Simulation
+ * CAN Protocol Educational Simulation - Production Version
  * 
  * Hardware: PIC32CM3204GV00048 on APP-MASTERS25-1 board
- * UART: SERCOM0 (PA08=TX, PA09=RX) @ 115200 baud
- * OLED: SERCOM2 I2C (PA12=SDA, PA13=SCL) @ 100 kHz
+ * 
+ * Peripherals:
+ *   - UART: SERCOM0 (PA08=TX, PA09=RX) @ 115200 baud
+ *   - OLED: SERCOM2 I2C (PA12=SDA, PA13=SCL) @ 100 kHz, SSD1306 128x64
+ *   - ADC:  PA03 (AIN1) for potentiometer
+ *   - GPIO: LEDs (PA00-PA01, PA10-PA11), RGB1 (PB09, PA04, PA05)
+ *   - GPIO: Buttons SW1 (PB10), SW2 (PA15), Buzzer (PA14)
+ * 
+ * Controls:
+ *   - SW1 (ACC): Hold to accelerate (rate depends on throttle)
+ *   - SW2 (BRK): Hold to brake (fixed deceleration)
+ *   - Potentiometer: Set throttle level (0-100%)
  ******************************************************************************/
 
 #include <stddef.h>
@@ -13,10 +23,16 @@
 #include <string.h>
 #include "definitions.h"
 
-/* Configuration */
-#define CPU_FREQ   8000000UL
+/*******************************************************************************
+ * CONFIGURATION
+ ******************************************************************************/
+#define CPU_FREQ        8000000UL
+#define BUZZER_ENABLED  0           /* Set to 1 to enable buzzer feedback */
+#define UPDATE_INTERVAL 200         /* Main loop update interval (ms) */
 
-/* LED Control (Active-Low) */
+/*******************************************************************************
+ * LED MACROS (Active-Low)
+ ******************************************************************************/
 #define LED1_ON()   LED1_Clear()
 #define LED1_OFF()  LED1_Set()
 #define LED2_ON()   LED2_Clear()
@@ -29,7 +45,9 @@
 #define BUZZER_ON()  Buzzer_Set()
 #define BUZZER_OFF() Buzzer_Clear()
 
-/* Timing */
+/*******************************************************************************
+ * TIMING FUNCTIONS
+ ******************************************************************************/
 static void delay_us(uint32_t us) {
     volatile uint32_t count = us * (CPU_FREQ / 1000000 / 4);
     while(count--);
@@ -46,23 +64,16 @@ static void print(const char* s);
 static void println(const char* s);
 
 /*******************************************************************************
- * I2C INTERFACE - Using MCC-generated SERCOM2 I2C Master driver
- ******************************************************************************/
-/* Legacy variable - kept for OLED library compatibility (not actively used) */
-volatile bool bIsI2C_DONE __attribute__((unused)) = false;
-
-/*******************************************************************************
- * OLED DISPLAY INTERFACE
+ * OLED DISPLAY
  ******************************************************************************/
 #include "OLED128x64.h"
 #define OLED_STANDALONE 1
-#include "OLED128x64.c"  /* Include source directly since not in Makefile */
+#include "OLED128x64.c"
 
-static char oled_buf[24];  /* String buffer for OLED */
+static char oled_buf[24];
 
 static void int_to_str(int32_t val, char* buf, int width) {
-    int len = 0;
-    int neg = 0;
+    int len = 0, neg = 0;
     char temp[12];
     
     if(val < 0) { neg = 1; val = -val; }
@@ -85,73 +96,61 @@ static void hex_to_str(uint16_t val, char* buf, int digits) {
     buf[digits] = '\0';
 }
 
-/* Update OLED with current vehicle/CAN data */
-static void oled_update_display(uint16_t rpm_val, uint8_t speed_val, uint8_t throttle_val, 
-                                 bool brake_on, uint16_t can_id, uint8_t dlc, uint8_t* data) {
-    /* Line 0 (y=0): Title */
+static void oled_update_display(uint16_t rpm_val, uint8_t speed_val, uint8_t thr_val,
+                                bool acc_on, bool brk_on,
+                                uint16_t can_id, uint8_t dlc, uint8_t* data, uint16_t crc_val) {
+    /* Line 0: Title */
     OLED_Put6x8Str(16, 0, (const uint8_t*)"CAN BUS MONITOR");
+    OLED_Put6x8Str(0, 1, (const uint8_t*)"---------------------");
     
-    /* Line 1 (y=1): Horizontal line */
-    OLED_Put6x8Str(0, 1, (const uint8_t*)"--------------------");
-    
-    /* Line 2-3 (y=2): RPM - large font */
+    /* Line 2-3: RPM (large font) */
     OLED_Put6x8Str(0, 2, (const uint8_t*)"RPM:");
     int_to_str(rpm_val, oled_buf, 5);
     OLED_Put8x16Str(30, 2, (const uint8_t*)oled_buf);
     
-    /* Line 4 (y=4): Speed */
+    /* Line 4: Speed + Throttle */
     OLED_Put6x8Str(0, 4, (const uint8_t*)"SPD:");
     int_to_str(speed_val, oled_buf, 3);
-    strcat(oled_buf, "km/h");
-    OLED_Put6x8Str(30, 4, (const uint8_t*)oled_buf);
-    
-    /* Line 4: Throttle (right side) */
-    OLED_Put6x8Str(78, 4, (const uint8_t*)"THR:");
-    int_to_str(throttle_val, oled_buf, 3);
+    OLED_Put6x8Str(24, 4, (const uint8_t*)oled_buf);
+    OLED_Put6x8Str(48, 4, (const uint8_t*)"km/h");
+    OLED_Put6x8Str(78, 4, (const uint8_t*)"T:");
+    int_to_str(thr_val, oled_buf, 3);
     strcat(oled_buf, "%");
-    OLED_Put6x8Str(102, 4, (const uint8_t*)oled_buf);
+    OLED_Put6x8Str(90, 4, (const uint8_t*)oled_buf);
     
-    /* Line 5 (y=5): Brake status */
-    if(brake_on)
-        OLED_Put6x8Str(0, 5, (const uint8_t*)"BRAKE [ENGAGED]   ");
-    else
-        OLED_Put6x8Str(0, 5, (const uint8_t*)"BRAKE [Released]  ");
+    /* Line 5: Button status */
+    OLED_Put6x8Str(0, 5, (const uint8_t*)"ACC:");
+    OLED_Put6x8Str(24, 5, acc_on ? (const uint8_t*)"[*]" : (const uint8_t*)"[ ]");
+    OLED_Put6x8Str(54, 5, (const uint8_t*)"BRK:");
+    OLED_Put6x8Str(78, 5, brk_on ? (const uint8_t*)"[*]" : (const uint8_t*)"[ ]");
     
-    /* Line 6 (y=6): CAN Frame Info */
-    OLED_Put6x8Str(0, 6, (const uint8_t*)"CAN:");
+    /* Line 6: CAN frame data */
     hex_to_str(can_id, oled_buf, 3);
-    OLED_Put6x8Str(30, 6, (const uint8_t*)oled_buf);
-    
-    OLED_Put6x8Str(54, 6, (const uint8_t*)"D:");
-    /* Show first 3 bytes of data */
-    for(int i = 0; i < dlc && i < 3; i++) {
+    OLED_Put6x8Str(0, 6, (const uint8_t*)oled_buf);
+    OLED_Put6x8Str(18, 6, (const uint8_t*)":");
+    for(int i = 0; i < dlc && i < 2; i++) {
         hex_to_str(data[i], oled_buf, 2);
-        OLED_Put6x8Str(66 + i * 18, 6, (const uint8_t*)oled_buf);
+        OLED_Put6x8Str(24 + i * 12, 6, (const uint8_t*)oled_buf);
     }
+    OLED_Put6x8Str(54, 6, (const uint8_t*)"CRC:");
+    hex_to_str(crc_val, oled_buf, 4);
+    OLED_Put6x8Str(78, 6, (const uint8_t*)oled_buf);
     
-    /* Line 7 (y=7): Status bar */
-    OLED_Put6x8Str(0, 7, (const uint8_t*)"--------------------");
+    /* Line 7: Footer */
+    OLED_Put6x8Str(0, 7, (const uint8_t*)"---------------------");
 }
 
-/* Initialize OLED with splash screen */
 static void oled_init_display(void) {
-    /* SERCOM2 I2C is initialized by SYS_Initialize() */
-    print("Init...");
-    delay_ms(100);  /* Wait for OLED power stabilization */
-    
-    print("OLED_Init...");
+    delay_ms(100);
     OLED_Init();
-    print("CLS...");
     OLED_CLS();
     delay_ms(10);
     
-    print("Splash...");
     /* Splash screen */
-    OLED_Put8x16Str(8, 1, (const uint8_t*)"MICROCHIP");
-    OLED_Put8x16Str(8, 3, (const uint8_t*)"CAN DEMO");
+    OLED_Put8x16Str(8, 1, (const uint8_t*)"NCUExMICROCHIP");
+    OLED_Put8x16Str(8, 3, (const uint8_t*)"CAN Simulation");
     OLED_Put6x8Str(22, 6, (const uint8_t*)"PIC32CM3204GV");
     delay_ms(1500);
-    
     OLED_CLS();
 }
 
@@ -197,7 +196,7 @@ static void print_pad(int32_t v, int width) {
 static void clear(void) { print("\033[2J\033[H"); }
 
 /*******************************************************************************
- * RGB1 LED (Common Cathode)
+ * RGB1 LED (Common Cathode: HIGH = ON)
  ******************************************************************************/
 #define RGB_RED_PIN   (1U << 9U)   /* PB09 */
 #define RGB_GREEN_PIN (1U << 4U)   /* PA04 */
@@ -216,21 +215,25 @@ static void rgb_init(void) {
     RGB_RED_OFF(); RGB_GREEN_OFF(); RGB_BLUE_OFF();
 }
 
-static void rgb_off(void)     { RGB_RED_OFF(); RGB_GREEN_OFF(); RGB_BLUE_OFF(); }
-static void rgb_red(void)     { RGB_RED_ON();  RGB_GREEN_OFF(); RGB_BLUE_OFF(); }
-static void rgb_green(void)   { RGB_RED_OFF(); RGB_GREEN_ON();  RGB_BLUE_OFF(); }
-static void rgb_blue(void)    { RGB_RED_OFF(); RGB_GREEN_OFF(); RGB_BLUE_ON();  }
-static void rgb_yellow(void)  { RGB_RED_ON();  RGB_GREEN_ON();  RGB_BLUE_OFF(); }
-static void rgb_cyan(void)    { RGB_RED_OFF(); RGB_GREEN_ON();  RGB_BLUE_ON();  }
-static void rgb_white(void)   { RGB_RED_ON();  RGB_GREEN_ON();  RGB_BLUE_ON();  }
+static void rgb_off(void)    { RGB_RED_OFF(); RGB_GREEN_OFF(); RGB_BLUE_OFF(); }
+static void rgb_red(void)    { RGB_RED_ON();  RGB_GREEN_OFF(); RGB_BLUE_OFF(); }
+static void rgb_green(void)  { RGB_RED_OFF(); RGB_GREEN_ON();  RGB_BLUE_OFF(); }
+static void rgb_blue(void)   { RGB_RED_OFF(); RGB_GREEN_OFF(); RGB_BLUE_ON();  }
+static void rgb_yellow(void) { RGB_RED_ON();  RGB_GREEN_ON();  RGB_BLUE_OFF(); }
+static void rgb_cyan(void)   { RGB_RED_OFF(); RGB_GREEN_ON();  RGB_BLUE_ON();  }
+static void rgb_white(void)  { RGB_RED_ON();  RGB_GREEN_ON();  RGB_BLUE_ON();  }
 
 /*******************************************************************************
  * BUZZER & ADC
  ******************************************************************************/
+#if BUZZER_ENABLED
 static void beep(uint16_t freq, uint16_t ms) {
     uint32_t half = 500000/freq, cycles = (uint32_t)freq*ms/1000;
-    for(uint32_t i=0; i<cycles; i++) { BUZZER_ON(); delay_us(half); BUZZER_OFF(); delay_us(half); }
+    for(uint32_t i = 0; i < cycles; i++) {
+        BUZZER_ON(); delay_us(half); BUZZER_OFF(); delay_us(half);
+    }
 }
+#endif
 
 static uint8_t read_pot(void) {
     ADC_ChannelSelect(ADC_POSINPUT_PIN1, ADC_NEGINPUT_GND);
@@ -243,9 +246,11 @@ static uint8_t read_pot(void) {
  * BUTTONS - SW1=PB10, SW2=PA15
  ******************************************************************************/
 static void btn_init(void) {
+    /* SW1 on PB10 */
     PORT_REGS->GROUP[1].PORT_DIRCLR = (1U << 10U);
     PORT_REGS->GROUP[1].PORT_PINCFG[10] = PORT_PINCFG_INEN_Msk | PORT_PINCFG_PULLEN_Msk;
     PORT_REGS->GROUP[1].PORT_OUTSET = (1U << 10U);
+    /* SW2 on PA15 */
     PORT_REGS->GROUP[0].PORT_DIRCLR = (1U << 15U);
     PORT_REGS->GROUP[0].PORT_PINCFG[15] = PORT_PINCFG_INEN_Msk | PORT_PINCFG_PULLEN_Msk;
     PORT_REGS->GROUP[0].PORT_OUTSET = (1U << 15U);
@@ -255,22 +260,45 @@ static bool sw1(void) { return ((PORT_REGS->GROUP[1].PORT_IN >> 10U) & 1U) == 0;
 static bool sw2(void) { return ((PORT_REGS->GROUP[0].PORT_IN >> 15U) & 1U) == 0; }
 
 /*******************************************************************************
- * VEHICLE STATE
+ * VEHICLE SIMULATION STATE
  ******************************************************************************/
 static uint16_t rpm = 850;
 static uint8_t speed = 0, throttle = 0;
 static bool brake = false, manual = false;
 
-/* CRC-15 for CAN */
+/* CAN CRC-15 calculation */
 static uint16_t crc15(uint16_t id, uint8_t dlc, uint8_t* data) {
     uint16_t crc = 0;
-    for(int i=10; i>=0; i--) { uint8_t n = ((id>>i)&1)^((crc>>14)&1); crc = (crc<<1)&0x7FFF; if(n) crc^=0x4599; }
-    for(int i=3; i>=0; i--) { uint8_t n = ((dlc>>i)&1)^((crc>>14)&1); crc = (crc<<1)&0x7FFF; if(n) crc^=0x4599; }
-    for(int b=0; b<dlc; b++) for(int i=7; i>=0; i--) { uint8_t n = ((data[b]>>i)&1)^((crc>>14)&1); crc = (crc<<1)&0x7FFF; if(n) crc^=0x4599; }
+    for(int i = 10; i >= 0; i--) {
+        uint8_t n = ((id >> i) & 1) ^ ((crc >> 14) & 1);
+        crc = (crc << 1) & 0x7FFF;
+        if(n) crc ^= 0x4599;
+    }
+    for(int i = 3; i >= 0; i--) {
+        uint8_t n = ((dlc >> i) & 1) ^ ((crc >> 14) & 1);
+        crc = (crc << 1) & 0x7FFF;
+        if(n) crc ^= 0x4599;
+    }
+    for(int b = 0; b < dlc; b++) {
+        for(int i = 7; i >= 0; i--) {
+            uint8_t n = ((data[b] >> i) & 1) ^ ((crc >> 14) & 1);
+            crc = (crc << 1) & 0x7FFF;
+            if(n) crc ^= 0x4599;
+        }
+    }
     return crc;
 }
 
-/* Update Vehicle State */
+/* Throttle-based acceleration rate */
+static uint8_t get_throttle_increment(uint8_t thr) {
+    if(thr >= 80) return 8;       /* 80-100%: +8 km/h */
+    else if(thr >= 60) return 6;  /* 60-79%:  +6 km/h */
+    else if(thr >= 40) return 4;  /* 40-59%:  +4 km/h */
+    else if(thr >= 10) return 2;  /* 10-39%:  +2 km/h */
+    else return 0;                /* 0-9%:    +0 km/h */
+}
+
+/* Update vehicle state based on inputs */
 static void update(void) {
     bool s1 = sw1(), s2 = sw2();
     throttle = read_pot();
@@ -278,38 +306,47 @@ static void update(void) {
     if(s1 || s2) manual = true;
     
     if(s1 && !s2) {
+        /* Accelerating */
         brake = false; LED4_OFF();
-        if(rpm < 6000) rpm += 100;
-        if(speed < 180) speed += 3;
+        uint8_t inc = get_throttle_increment(throttle);
+        if(rpm < 6000) rpm += 50 + inc * 10;
+        if(speed < 180) speed += inc;
     } else if(s2 && !s1) {
+        /* Braking */
         brake = true; LED4_ON();
         if(rpm > 800) rpm -= 150;
         if(speed > 0) speed -= 5; else speed = 0;
     } else {
+        /* Coasting */
         brake = false; LED4_OFF();
         if(manual) {
-            if(throttle > 20) { rpm = 800 + throttle*40; if(speed < throttle) speed++; }
-            else { if(rpm > 800) rpm -= 30; if(speed > 0) speed--; }
+            if(rpm > 850) rpm -= 20;
+            if(speed > 0) speed--;
         } else {
-            static uint8_t ph=0; static uint16_t t=0; t++;
-            if(ph==0) { rpm=850; speed=0; throttle=0; if(t>5) {ph=1;t=0;} }
-            else if(ph==1) { if(throttle<70) throttle+=10; rpm=1000+throttle*30; if(speed<80) speed+=5; if(speed>=80) {ph=2;t=0;} }
-            else if(ph==2) { rpm=2200; speed=80; throttle=30; if(t>8) {ph=3;t=0;} }
-            else { throttle=0; brake=true; if(rpm>800) rpm-=150; if(speed>0) speed-=8; else {speed=0;brake=false;} if(speed==0) {ph=0;t=0;} }
+            /* Auto demo mode */
+            static uint8_t phase = 0;
+            static uint16_t tick = 0;
+            tick++;
+            switch(phase) {
+                case 0: rpm = 850; speed = 0; if(tick > 5) { phase = 1; tick = 0; } break;
+                case 1: rpm = 1000 + speed * 20; if(speed < 80) speed += 3; if(speed >= 80) { phase = 2; tick = 0; } break;
+                case 2: rpm = 2200; speed = 80; if(tick > 8) { phase = 3; tick = 0; } break;
+                case 3: brake = true; if(rpm > 800) rpm -= 150; if(speed > 0) speed -= 5; else { speed = 0; brake = false; phase = 0; tick = 0; } break;
+            }
         }
     }
     
-    /* RGB1 LED - Speed-based colors */
-    if(brake)          rgb_red();
-    else if(speed>100) rgb_yellow();
-    else if(speed>60)  rgb_green();
-    else if(speed>20)  rgb_cyan();
-    else if(speed>0)   rgb_blue();
-    else               rgb_white();
+    /* RGB LED color based on speed/brake */
+    if(brake)         rgb_red();
+    else if(speed>70) rgb_yellow();
+    else if(speed>50) rgb_green();
+    else if(speed>30) rgb_cyan();
+    else if(speed>10) rgb_blue();
+    else              rgb_white();
 }
 
 /*******************************************************************************
- * TERMINAL DISPLAY FUNCTIONS
+ * TERMINAL DISPLAY
  ******************************************************************************/
 static void show_title(void) {
     println("");
@@ -330,14 +367,12 @@ static void show_status(void) {
     println("------------------------------------------------------------");
     println("VEHICLE STATUS:");
     println("");
-    
     print("  Engine RPM:     "); print_pad(rpm, 6); println("");
     print("  Speed:          "); print_pad(speed, 3); println(" km/h");
     print("  Throttle:       "); print_pad(throttle, 3); println(" %");
     print("  Brake:          "); println(brake ? "ENGAGED" : "Released");
-    print("  Mode:           "); println(manual ? "MANUAL (user control)" : "AUTO SIMULATION");
+    print("  Mode:           "); println(manual ? "MANUAL" : "AUTO DEMO");
     println("");
-    
     print("  SW1: "); print(sw1() ? "PRESSED  " : "---      ");
     print("  SW2: "); println(sw2() ? "PRESSED" : "---");
     println("");
@@ -345,7 +380,9 @@ static void show_status(void) {
 
 static void show_can(uint16_t id, const char* name, uint8_t dlc, uint8_t* data) {
     LED1_ON();
+#if BUZZER_ENABLED
     beep(3000, 5);
+#endif
     
     println("------------------------------------------------------------");
     println("CAN FRAME TRANSMITTED:");
@@ -354,7 +391,7 @@ static void show_can(uint16_t id, const char* name, uint8_t dlc, uint8_t* data) 
     print("  CAN ID:         "); print_hex(id, 3); println("");
     print("  Data Length:    "); print_int(dlc); println(" bytes");
     print("  Data Bytes:     ");
-    for(int i=0; i<dlc; i++) { print_hex(data[i], 2); print(" "); }
+    for(int i = 0; i < dlc; i++) { print_hex(data[i], 2); print(" "); }
     println("");
     print("  CRC-15:         "); print_hex(crc15(id, dlc, data), 4); println("");
     println("");
@@ -364,7 +401,7 @@ static void show_can(uint16_t id, const char* name, uint8_t dlc, uint8_t* data) 
 }
 
 /*******************************************************************************
- * MAIN FUNCTION
+ * MAIN
  ******************************************************************************/
 int main(void) {
     SYS_Initialize(NULL);
@@ -372,7 +409,7 @@ int main(void) {
     ADC_Enable();
     rgb_init();
     
-    /* Startup */
+    /* Startup sequence */
     clear();
     println("");
     println("========================================");
@@ -380,35 +417,49 @@ int main(void) {
     println("========================================");
     println("");
     
-    println("Testing hardware...");
-    print("  LED1-4:  "); LED1_ON(); delay_ms(100); LED1_OFF();
+    /* Hardware test */
+    print("  LEDs:    ");
+    LED1_ON(); delay_ms(100); LED1_OFF();
     LED2_ON(); delay_ms(100); LED2_OFF();
     LED3_ON(); delay_ms(100); LED3_OFF();
-    LED4_ON(); delay_ms(100); LED4_OFF(); println("OK");
+    LED4_ON(); delay_ms(100); LED4_OFF();
+    println("OK");
     
-    println("  RGB1 LED test:");
-    rgb_red(); delay_ms(300);
-    rgb_green(); delay_ms(300);
-    rgb_blue(); delay_ms(300);
-    rgb_off(); println("    R->G->B OK");
+    print("  RGB:     ");
+    rgb_red(); delay_ms(200);
+    rgb_green(); delay_ms(200);
+    rgb_blue(); delay_ms(200);
+    rgb_off();
+    println("OK");
     
+#if BUZZER_ENABLED
     print("  Buzzer:  "); beep(1000, 100); println("OK");
-    print("  ADC:     "); print_int(read_pot()); println("% OK");
+#else
+    println("  Buzzer:  Disabled");
+#endif
     
-    /* Initialize OLED Display */
+    print("  ADC:     "); print_int(read_pot()); println("%");
+    
     print("  OLED:    ");
     oled_init_display();
     println("OK");
     
     println("");
-    println("Starting CAN simulation...");
-    beep(1000,100); delay_ms(50); beep(1500,100); delay_ms(50); beep(2000,150);
+    println("System ready. Starting simulation...");
+    
+#if BUZZER_ENABLED
+    beep(1000, 100); delay_ms(50);
+    beep(1500, 100); delay_ms(50);
+    beep(2000, 150);
+#endif
     delay_ms(1000);
     
-    /* Main Loop */
+    /* Main loop variables */
     uint8_t msg = 0;
     uint8_t data[8];
     uint16_t current_can_id = 0x0C0;
+    uint8_t current_dlc = 2;
+    uint16_t current_crc = 0;
     
     while(1) {
         update();
@@ -417,13 +468,15 @@ int main(void) {
         show_controls();
         show_status();
         
+        /* Cycle through CAN messages */
         switch(msg) {
-            case 0: /* RPM */
+            case 0: /* Engine RPM */
                 data[0] = (rpm >> 8) & 0xFF;
                 data[1] = rpm & 0xFF;
                 current_can_id = 0x0C0;
+                current_dlc = 2;
+                current_crc = crc15(current_can_id, current_dlc, data);
                 show_can(0x0C0, "ENGINE_RPM", 2, data);
-                
                 print("  Formula:        RPM = (Data[0] << 8) | Data[1]\n");
                 print("  Calculation:    RPM = (");
                 print_int(data[0]); print(" x 256) + ");
@@ -432,11 +485,12 @@ int main(void) {
                 println("");
                 break;
                 
-            case 1: /* Speed */
+            case 1: /* Vehicle Speed */
                 data[0] = speed;
                 current_can_id = 0x0D0;
+                current_dlc = 1;
+                current_crc = crc15(current_can_id, current_dlc, data);
                 show_can(0x0D0, "VEHICLE_SPEED", 1, data);
-                
                 print("  Formula:        Speed = Data[0]\n");
                 print("  Calculation:    Speed = ");
                 print_int(speed); println(" km/h");
@@ -447,8 +501,9 @@ int main(void) {
                 data[0] = throttle;
                 data[1] = brake ? 1 : 0;
                 current_can_id = 0x0F0;
+                current_dlc = 2;
+                current_crc = crc15(current_can_id, current_dlc, data);
                 show_can(0x0F0, "THROTTLE_BRAKE", 2, data);
-                
                 println("  Formula:        Throttle = Data[0], Brake = Data[1]");
                 print("  Calculation:    Throttle = ");
                 print_int(throttle); print("%, Brake = ");
@@ -459,14 +514,12 @@ int main(void) {
         
         println("============================================================");
         
-        /* Update OLED Display */
-        oled_update_display(rpm, speed, throttle, brake, current_can_id, 
-                           (msg == 1) ? 1 : 2, data);
+        /* Update OLED */
+        oled_update_display(rpm, speed, throttle, sw1(), sw2(),
+                           current_can_id, current_dlc, data, current_crc);
         
-        msg++;
-        if(msg > 2) msg = 0;
-        
-        delay_ms(2000);
+        msg = (msg + 1) % 3;
+        delay_ms(UPDATE_INTERVAL);
     }
     
     return 0;

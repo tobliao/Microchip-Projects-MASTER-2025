@@ -17,7 +17,7 @@ This demo **simulates a Vehicle ECU** with interactive controls:
 |-----------|---------|----------|
 | **SW1** | PB10 | Accelerate button (hold to speed up) |
 | **SW2** | PA15 | Brake button (hold to slow down) |
-| **Potentiometer** | PA03 | Throttle control (ADC input) |
+| **Potentiometer** | PA03 (Nano_AN2) | Throttle control (ADC AIN1) |
 | **LED1** | PA00 | CAN TX indicator |
 | **LED2** | PA01 | Dashboard indicator |
 | **LED3** | PA10 | Engine warning |
@@ -74,9 +74,14 @@ This demo **simulates a Vehicle ECU** with interactive controls:
 
 | Setting | Value |
 |---------|-------|
-| Reference | VDDANA |
-| Prescaler | DIV64 |
-| Resolution | 12-bit |
+| Select Prescaler | Peripheral clock divided by 64 |
+| Select Sample Length | 4 (half ADC clock cycles) |
+| Select Gain | 1x |
+| Select Reference | 1/2 VDDANA (only for VDDANA > 2.0V) |
+| Select Conversion Trigger | Free Run |
+| **Select Positive Input** | **ADC AIN1 Pin** (PA03 = Nano_AN2 on board) |
+| Select Negative Input | Internal ground |
+| Select Result Resolution | 12-bit result |
 
 ### Step 6: Configure All GPIO Pins
 
@@ -116,9 +121,11 @@ Open **Pin Manager** → **Grid View** and configure each pin:
 | PA14 | Buzzer | GPIO | Output | Low |
 
 #### Potentiometer (ADC)
-| Pin | Custom Name | Function | Mode |
-|-----|-------------|----------|------|
-| PA03 | Potentiometer | ADC_AIN1 | Analog |
+| Pin | Board Label | Custom Name | Function | Mode |
+|-----|-------------|-------------|----------|------|
+| PA03 | Nano_AN2 | Potentiometer | ADC_AIN1 | Analog |
+
+**Note:** The board labels this as "Nano_AN2" (Pin 4), but PA03 is mapped to ADC channel **AIN1** in the MCU.
 
 #### UART (Auto-configured with SERCOM0)
 | Pin | Function |
@@ -225,10 +232,24 @@ All LEDs will flash, RGB cycles through colors, OLED shows "MICROCHIP CAN DEMO" 
 
 | Control | Action | Effect |
 |---------|--------|--------|
-| **SW1** | **HOLD** | Accelerate - RPM↑, Speed↑ |
-| **SW2** | **HOLD** | Brake - RPM↓, Speed↓ |
-| **Potentiometer** | **TURN** | Set throttle level (0-100%) |
+| **SW1 (ACC)** | **HOLD** | Accelerate - speed increase depends on throttle |
+| **SW2 (BRK)** | **HOLD** | Brake - RPM↓, Speed↓ (fixed rate) |
+| **Potentiometer** | **TURN** | Set throttle level (only affects speed when ACC held) |
 | **Release both** | - | Coast (speed gradually decreases) |
+
+**Important:** The potentiometer (throttle) only affects acceleration rate when SW1 is held. It does NOT cause acceleration on its own.
+
+### Throttle-Based Acceleration (when SW1 held)
+
+| Throttle | Speed Increase | Description |
+|----------|----------------|-------------|
+| 80-100%  | +8 km/h/update | Full throttle - rapid acceleration |
+| 60-79%   | +6 km/h/update | High throttle |
+| 40-59%   | +4 km/h/update | Medium throttle |
+| 10-39%   | +2 km/h/update | Low throttle |
+| 0-9%     | +0 km/h/update | Idle - no acceleration |
+
+**Note:** Brake (SW2) uses a fixed deceleration rate regardless of throttle position.
 
 ### LED Indicators
 
@@ -241,33 +262,42 @@ All LEDs will flash, RGB cycles through colors, OLED shows "MICROCHIP CAN DEMO" 
 
 ### RGB1 LED Colors
 
-| Color | Vehicle State |
-|-------|---------------|
-| 🔴 **Red** | Braking (SW2 held) |
-| 🟡 **Yellow** | High speed (>100 km/h) |
-| 🟢 **Green** | Cruising (60-100 km/h) |
-| 🩵 **Cyan** | Medium speed (20-60 km/h) |
-| 🔵 **Blue** | Slow (1-20 km/h) |
-| ⚪ **White** | Stopped/Idle (0 km/h) |
+| Color | Vehicle State | Speed Range |
+|-------|---------------|-------------|
+| 🔴 **Red** | Braking | SW2 held |
+| 🟡 **Yellow** | High speed | > 70 km/h |
+| 🟢 **Green** | Cruising | 51-70 km/h |
+| 🩵 **Cyan** | Medium speed | 31-50 km/h |
+| 🔵 **Blue** | Slow | 11-30 km/h |
+| ⚪ **White** | Stopped/Idle | 0-10 km/h |
 
 ### OLED Display (128x64)
 
 The OLED shows real-time vehicle data in a professional dashboard layout:
 
 ```
-+----------------------+
-|   CAN BUS MONITOR    |   <- Title
-|----------------------|
-| RPM:  2200           |   <- Engine RPM (large font)
-|----------------------|
-| SPD: 80km/h THR: 45% |   <- Speed & Throttle
-| BRAKE [Released]     |   <- Brake status
-|----------------------|
-| CAN:0C0 D:08 A0      |   <- CAN ID & Data bytes
-+----------------------+
++---------------------+
+|  CAN BUS MONITOR    |  <- Title
+|---------------------|
+| RPM:                |  <- Engine RPM (large 8x16 font)
+|      2850           |
+| SPD:120km/h  T: 85% |  <- Speed + Throttle
+| ACC:[*] BRK:[ ]     |  <- Button status (SW1/SW2)
+| 0C0:04B2 CRC:1A3F   |  <- CAN ID:Data + CRC-15
+|---------------------|
++---------------------+
 ```
 
-The display updates every 2 seconds alongside the terminal output.
+| Field | Description |
+|-------|-------------|
+| **SPD** | Vehicle speed in km/h |
+| **T:** | Throttle percentage (0-100%) |
+| **ACC:[*]** | SW1 pressed (accelerating) |
+| **BRK:[*]** | SW2 pressed (braking) |
+| **[ ]** | Button released |
+| **CRC:xxxx** | CAN frame CRC-15 checksum |
+
+The display updates every 200ms for responsive feedback.
 
 ### Buzzer Feedback
 

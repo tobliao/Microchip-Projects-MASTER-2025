@@ -214,4 +214,14 @@ data:
           type: Dynamic
         type: Values
       type: String
+    ADC_INPUTCTRL_MUXPOS:
+      attributes:
+        id: ADC_INPUTCTRL_MUXPOS
+      children:
+      - children:
+        - attributes:
+            value: '2'
+          type: User
+        type: Values
+      type: KeyValueSet
   userData: {}
