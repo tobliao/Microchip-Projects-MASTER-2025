@@ -27,7 +27,7 @@
  * CONFIGURATION
  ******************************************************************************/
 #define CPU_FREQ        8000000UL
-#define BUZZER_ENABLED  0           /* Set to 1 to enable buzzer feedback */
+#define BUZZER_ENABLED  1           /* Set to 1 to enable buzzer feedback */
 #define UPDATE_INTERVAL 200         /* Main loop update interval (ms) */
 
 /*******************************************************************************

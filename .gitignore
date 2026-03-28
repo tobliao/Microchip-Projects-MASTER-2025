@@ -1,0 +1,22 @@
+# MPLAB X IDE - Build outputs
+CAN/CAN_lab.X/build/
+CAN/CAN_lab.X/dist/
+CAN/CAN_lab.X/debug/
+CAN/CAN_lab.X/.generated_files/
+
+# Compiled object and binary files
+*.o
+*.d
+*.elf
+*.hex
+*.map
+
+# MPLAB X IDE - IDE private/session files (machine-specific)
+nbproject/private/
+**/nbproject/private/
+
+# MCC Melody auto-save (volatile, regenerated automatically)
+*-autosave.yml
+
+# macOS metadata
+.DS_Store
