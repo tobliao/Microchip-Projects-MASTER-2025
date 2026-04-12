@@ -20,3 +20,5 @@ nbproject/private/
 
 # macOS metadata
 .DS_Store
+/intro/lab01.X/build/
+/intro/lab01.X/dist/
