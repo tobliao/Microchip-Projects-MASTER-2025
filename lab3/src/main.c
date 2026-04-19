@@ -25,11 +25,11 @@
 #include <stdbool.h>                    // Defines true
 #include <stdlib.h>                     // Defines EXIT_FAILURE
 #include "definitions.h"                // SYS function prototypes
-#include "OLED128x64.h"
+#include "OLED128x64.c"                 /* includes OLED128x64.h + OLED_FONTs.c internally */
 
 volatile bool       bFlag_200ms = 0 ;
 volatile bool       bIsI2C_DONE = true ;
-uint8_t               ASCII_Buffer[24];
+uint8_t             ASCII_Buffer[24];
 // *****************************************************************************
 // *****************************************************************************
 // Section: Main Entry Point
@@ -52,22 +52,21 @@ int main ( void )
 {
     /* Initialize all modules */
     SYS_Initialize ( NULL );
-        /* Register Callback */
+    /* Register Callback */
     SYSTICK_TimerCallbackSet(SYSTICK_EventHandler, (uintptr_t) NULL);
     /* Start the Timer */
     SYSTICK_TimerStart();
     ADC_Enable();
  
-        bFlag_200ms = 0 ;
-        while ( bFlag_200ms ==0)      // 等待 OLED RESET 完成 !
-        {;}
-         bFlag_200ms = 0 ;
-        SERCOM2_I2C_CallbackRegister(I2C_EventHandler,0) ;    
-        OLED_Init();
-        OLED_CLS();
-        OLED_Put8x16Str(0, 0, (const unsigned char*) "APP-MASTERS25-1") ;    
-        OLED_Put8x16Str(0, 2, (const unsigned char*) " PIC32CM3204GV ") ;    
-        OLED_Put8x16Str(0, 4, (const unsigned char*) "VR =  ") ;   
+    bFlag_200ms = 0 ;
+    while ( bFlag_200ms ==0){;}      // 等待 OLED RESET 完成 !
+    bFlag_200ms = 0 ;
+    SERCOM2_I2C_CallbackRegister(I2C_EventHandler,0) ;    
+    OLED_Init();
+    OLED_CLS();
+    OLED_Put8x16Str(0, 0, (const unsigned char*) "NCUExMicrochip") ;    
+    OLED_Put8x16Str(0, 2, (const unsigned char*) "PIC32CM3204GV048") ;    
+    OLED_Put8x16Str(0, 4, (const unsigned char*) "VR =  ") ;   
     
     while ( true )
     {
@@ -80,8 +79,8 @@ int main ( void )
             ADC_ConversionStart();
             while (!ADC_ConversionStatusGet()) ;            
             printf ("ADC = %4d\n\r", ADC_ConversionResultGet()) ;
-                sprintf((char*)ASCII_Buffer,"%4d",ADC_ConversionResultGet());
-                OLED_Put8x16Str(40, 4, ASCII_Buffer) ;   
+            sprintf((char*)ASCII_Buffer,"%4d",ADC_ConversionResultGet());
+            OLED_Put8x16Str(40, 4, ASCII_Buffer) ;   
             bFlag_200ms = 0 ;
         }
     }
