@@ -3,6 +3,7 @@ CAN/CAN_lab.X/build/
 CAN/CAN_lab.X/dist/
 CAN/CAN_lab.X/debug/
 CAN/CAN_lab.X/.generated_files/
+CAN/CAN_lab.X/paper/
 
 # Compiled object and binary files
 *.o

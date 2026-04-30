@@ -1,0 +1,451 @@
+---
+description: Microchip + CAN paper workflow. Defines the canonical folder layout, slug rule, slug registry, rule precedence, label and bibliography hygiene, figures manifest contract, figure-script originality discipline, symbol-conflict policy, cross-paper citation placement, acronym discipline, MDPI preamble seed, hardware ethics blocks, citation-key convention, pre-reads, pre-submission checklist, commit-message convention, split-topic guidance, cross-paper originality discipline, firmware-replay evaluation pattern, and a paper-genre appendix for every Microchip-MCU-with-CAN manuscript in this repository.
+globs: CAN_lab.X/paper/**/*.tex,CAN_lab.X/paper/**/*.md
+alwaysApply: false
+---
+
+# Purpose
+
+This rule governs how a manuscript that targets a Microchip microcontroller communicating over (or simulating) the CAN protocol is added to, organised in, and extended within this repository.
+It complements `latex-inst.mdc` (which governs writing voice and ethics) and is triggered whenever work is performed inside `CAN_lab.X/paper/`.
+
+Two invariants hold for every paper under `CAN_lab.X/paper/`:
+
+1. The target is a **Microchip MCU** (PIC18, PIC24, dsPIC33, PIC32CM, PIC32MX/MZ/MK, SAM-family ARM, AVR-DA, or any future Microchip part).
+2. The **CAN protocol** is the subject or the communication substrate of the work, whether realised on a built-in CAN controller, on an external MCP2515 / MCP25625, on a software simulation, or on a CAN transceiver-only educational board such as APP-MASTERS25-1 with ATA6561.
+
+The chip family and the CAN application (gateway, diagnostics, body-electronics, motor control, telemetry dashboard, educational simulator) are free parameters and are selected per paper.
+
+Follow this rule whenever a new topic is proposed, a new paper is scaffolded, or an existing paper is migrated.
+Deviations must be called out in the plan file before the deviation is executed.
+
+# Rule precedence
+
+When guidance from multiple sources collides, precedence resolves in this order:
+
+1. The MDPI journal template (for example `Definitions/mdpi.cls`) controls structural tokens such as `\authorcontributions{}` and `\conflictsofinterest{}`; their exact form matches the template verbatim.
+2. This rule (`microchip-can-paper-workflow.mdc`) controls folder layout, slug convention, label prefixes, figure manifests, acronym discipline, and the ethics-block templates below.
+3. `latex-inst.mdc` controls prose voice, forbidden words, paragraph rhythm, and the pre-commit writing checklist.
+4. `swt-citation-policy.mdc` controls the SWT self-citation source-of-truth contract, the exact-three rule, the retraction block, editorial rules 3--7, the per-paper `swt-citation-summary.txt` artifact, and the five-check pre-commit verification snippet.
+
+Any deviation from a higher-priority rule must be documented in the plan file before execution and, if repeated across topics, promoted into a rule amendment.
+
+# Canonical folder layout
+
+Every Microchip + CAN paper lives in its own folder under `CAN_lab.X/paper/<slug>/`.
+The layout is flat; no `eng/` or journal-specific subfolder is permitted (see "Hard-forbid of journal-named subfolders" below).
+Each paper folder must contain, at minimum:
+
+```
+CAN_lab.X/paper/<slug>/
+  main.tex
+  figures/
+    README.md
+    manifest.md
+  scripts/
+    README.md
+  review/
+    README.md
+```
+
+An optional-but-recommended `hardware/` folder holds the artefacts that are unique to embedded work and that would not appear in a pure-software paper:
+
+```
+CAN_lab.X/paper/<slug>/
+  hardware/
+    README.md
+    pinmap.md          # board-to-MCU pin assignments
+    mcc_export/        # MCC Melody project snapshot, if reproducibility is claimed
+    schematics/        # board schematic excerpts in PDF or SVG
+    captures/          # oscilloscope, logic-analyser, CAN-bus log exports
+```
+
+`figures/`, `scripts/`, and `review/` are always created up front, even when empty, so the structure is identical across all topics and a reviewer never has to ask where a figure source lives.
+`hardware/` is created the moment the paper cites any pin assignment, MCC setting, or captured waveform that a reviewer would want to audit.
+
+# Slug naming rule
+
+The folder name is derived mechanically from `\Title{}` so the slug is reproducible from the title alone and carries no author judgement.
+
+## Core rule
+
+Take the first six whitespace-separated tokens of `\Title{}`, lowercase them, and join them with a single underscore (`_`).
+No token is paraphrased, skipped, or abbreviated; no character inside a token is dropped except where the normalisation table below explicitly allows it.
+
+Worked example:
+
+- `\Title{Real-Time Vehicle Telemetry Display System Based on CAN Protocol: A Hardware-Software Co-Design Approach Using Microchip PIC32CM Series}`
+- Tokens 1--6: `Real-Time`, `Vehicle`, `Telemetry`, `Display`, `System`, `Based`
+- Slug: `real-time_vehicle_telemetry_display_system_based`
+
+## Character normalisation table
+
+This is the only permitted normalisation.
+Any character not covered here must be resolved by rewording the title before the folder is created, not by ad-hoc edits to the slug.
+
+| Source pattern               | Slug form                                         | Rationale                                                         |
+| ---------------------------- | ------------------------------------------------- | ----------------------------------------------------------------- |
+| LaTeX `--` (en-dash)         | `-` (single hyphen)                               | Filesystem portability across macOS, Linux, and Windows.          |
+| Trailing `:` `;` `,` `.` `!` | stripped                                          | Title punctuation is grammatical, not identifying.                |
+| Leading `"`, trailing `"`    | stripped                                          | Titles occasionally quote a concept; the quotes are decorative.   |
+| `'` (apostrophe inside word) | stripped, preserving letters                      | Natural folder-typing expectations (`don't` -> `dont`).           |
+| `(` `)` `[` `]`              | stripped                                          | Parenthetical titles collapse cleanly.                            |
+| `&`                          | `and`                                             | Mirrors common English expansion.                                 |
+| `/`                          | `-`                                               | Filesystem-reserved character replaced with a hyphen.             |
+| Non-ASCII letter             | ASCII transliteration (`é` -> `e`, `ö` -> `o`)    | ASCII-only folder names.                                          |
+| Numeric tokens               | kept as-is                                        | Numbers carry meaning in titles (part numbers, bus speeds, years). |
+
+## Freeze-on-creation
+
+The slug is frozen at the moment the folder is created.
+Later edits to `\Title{}` do not trigger a folder rename.
+If the title is revised so heavily that the slug becomes misleading, treat the revision as a new manuscript and create a new slug folder, citing the previous manuscript via `\cite{...}`.
+
+## Collision resolution
+
+If two papers would yield the same slug, append `_pt2` to the younger one.
+This is the only allowed deviation from the six-word rule and must be recorded in the slug registry with a note.
+
+## Grandfathered exceptions
+
+Folders that predate this rule are retained under their original names and flagged in the slug registry under the `Note` column with the string `grandfathered (<N>-token)`.
+Grandfathered slugs are not re-derived from their titles; they keep their pre-rule form to avoid breaking downstream references, and the `Note` column preserves the audit trail.
+The six-token core rule applies to every new slug created after this rule takes effect.
+
+The long human-readable title always lives inside `main.tex` under `\Title{...}` and is independent of the slug.
+
+# Slug registry
+
+Canonical registry with a fixed column set.
+Every new topic appends a row in the same commit that creates the folder; stale rows are retained with a `retired` status rather than deleted.
+
+| # | Slug                                                | Full `\Title{}`                                                                                                                                                     | First-six-words segment                                | Status     | Note                                                                                                          |
+| - | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------- |
+| 1 | `real_time_vehicle_telemetry_display`               | `Real-Time Vehicle Telemetry Display System Based on CAN Protocol: A Hardware-Software Co-Design Approach Using Microchip PIC32CM Series`                           | `Real-Time Vehicle Telemetry Display`                  | scaffolded | grandfathered (4-token)                                                                                       |
+| 2 | `software_can_protocol_simulator_on_pic32cm`        | `Software-Only Controller Area Network Bit-Stream Simulator on PIC32CM for Embedded Protocol Education`                                                             | `Software-Only Controller Area Network Bit-Stream`     | scaffolded | manual-shortened (six-token deviation documented in plan `two_new_can_topics_6734314d`)                       |
+| 3 | `can_fd_throughput_and_arbitration_evaluation`       | `CAN-FD Throughput and Arbitration-Phase Evaluation on PIC32CM with the MCP2517FD External Controller`                                                              | `CAN-FD Throughput and Arbitration-Phase Evaluation on` | scaffolded | manual-shortened (six-token deviation documented in plan `two_new_can_topics_6734314d`)                       |
+
+# 10-step checklist for adding a new topic
+
+1. Derive the slug mechanically from the candidate `\Title{}` using the core rule and the normalisation table.
+2. Confirm the slug is not already taken under `CAN_lab.X/paper/` and append a new row to the slug registry above.
+3. Create `CAN_lab.X/paper/<slug>/` together with the four mandatory subpaths listed in the layout section, each seeded with a one-line `README.md`.
+4. Copy the MDPI preamble (see the preamble spec below) into a fresh `CAN_lab.X/paper/<slug>/main.tex`; do not copy body text from any sibling paper.
+5. Fill `\Title{...}`, `\Author{...}`, `\abstract{...}`, and `\keyword{...}` with topic-specific content written from scratch.
+6. Draft the section skeleton as described in `latex-inst.mdc`, ensuring all labels follow the canonical convention below.
+7. List every planned figure in `figures/manifest.md` before producing the figure; the manifest entry comes first, the figure artifact second.
+8. Place figure-generation scripts in `scripts/` with a `README.md` entry explaining their inputs, outputs, and runtime assumptions.
+9. Run the firmware-source hygiene sweep (verify every cited pin, peripheral, register, or register-field in `main.tex` resolves against `src/main.c` or the cited MCC export), the label / bibliography hygiene check, the forbidden-word sweep defined in `latex-inst.mdc` against the new `main.tex`, and the SWT five-check pre-commit verification snippet from `swt-citation-policy.mdc` against every `CAN_lab.X/paper/*/main.tex` and the corresponding `swt-citation-summary.txt` files.
+10. Commit using the convention `paper(<slug>): <imperative summary>`.
+
+# MDPI preamble spec
+
+Every `main.tex` begins with the MDPI `eng` document class, even if the target journal differs, because the Overleaf project hosting this repository is configured against the MDPI template bundle.
+The following preamble block is the canonical seed and must remain syntactically identical across all papers; topic-specific packages are appended below this block, not interleaved within it.
+
+```
+\documentclass[eng,article,submit,pngtex,moreauthors]{Definitions/mdpi}
+\firstpage{1}
+\makeatletter
+\setcounter{page}{\@firstpage}
+\makeatother
+\pubvolume{1}
+\issuenum{1}
+\articlenumber{0}
+\pubyear{2026}
+\copyrightyear{2026}
+\datereceived{}
+\dateaccepted{}
+\datepublished{}
+\hreflink{}
+\Title{<SLUG-SPECIFIC TITLE>}
+\TitleCitation{<SHORT CITATION TITLE>}
+\Author{<AUTHORS>}
+\AuthorCitation{<SHORT CITATION AUTHORS>}
+\address{<AFFILIATIONS>}
+\corres{Correspondence: <email>}
+\abstract{<ABSTRACT, one sentence per line>}
+\keyword{<semicolon-separated keyword list>}
+\begin{document}
+```
+
+Topic-specific packages, `\newcommand` definitions, and macros may be added after `\begin{document}` only if they are also added in a commented block above `\begin{document}` for readability.
+
+# Hard-forbid of journal-named subfolders
+
+No paper folder may contain an `eng/`, `sensors/`, `applsci/`, `electronics/`, or similar journal-named subfolder.
+If a submission requires a journal-specific variant of `main.tex`, the variant lives alongside `main.tex` with an underscore suffix (for example `main_electronics.tex`) and is declared in a new section of this rule before the variant is committed.
+
+# Canonical `\label{}` convention
+
+Labels exist so cross-references survive refactors.
+The following prefixes are mandatory; inventing new prefixes is not permitted.
+
+| Element            | Prefix   | Example                              |
+| ------------------ | -------- | ------------------------------------ |
+| Section            | `sec:`   | `\label{sec:intro}`                  |
+| Subsection         | `sec:`   | `\label{sec:methods-can-frame}`      |
+| Figure             | `fig:`   | `\label{fig:block-diagram}`          |
+| Table              | `tab:`   | `\label{tab:pinmap}`                 |
+| Algorithm          | `alg:`   | `\label{alg:crc15}`                  |
+| Equation           | `eq:`    | `\label{eq:baud-timing}`             |
+| Listing            | `lst:`   | `\label{lst:can-tx-routine}`         |
+| Bibliography entry | (none)   | `\bibitem[...]{AuthorYear}`          |
+
+Slugs inside labels use the same kebab-case convention as folder slugs.
+Never use spaces, Unicode punctuation, or uppercase in a label body.
+The `lst:` prefix is reserved for `\begin{lstlisting}` blocks; firmware snippets are common in this repository's genres and deserve their own namespace so cross-references to code remain distinguishable from figures and tables.
+
+# Label and bibliography hygiene
+
+Before committing an edit that changes labels or references, all four conditions below must hold.
+
+1. Every `\label{...}` in `main.tex` is referenced by at least one `\ref{...}`, `\autoref{...}`, `\cref{...}`, or `\eqref{...}`.
+2. Every `\ref{...}`, `\autoref{...}`, `\cref{...}`, or `\eqref{...}` target resolves to an existing `\label{...}`.
+3. Every `\cite{...}` target resolves to an existing `\bibitem`.
+4. Every `\bibitem` is cited at least once.
+
+Reference shell snippet (run from the repository root, substituting the slug):
+
+```bash
+f="CAN_lab.X/paper/<slug>/main.tex"
+grep -oE '\\label\{[^}]+\}'      "$f" | sort -u > /tmp/labels.txt
+grep -oE '\\(ref|autoref|cref|eqref)\{[^}]+\}' "$f" | sort -u > /tmp/refs.txt
+grep -oE '\\cite\{[^}]+\}'       "$f" | sort -u > /tmp/cites.txt
+grep -oE '\\bibitem(\[[^]]*\])?\{[^}]+\}' "$f" | sort -u > /tmp/bibitems.txt
+diff /tmp/labels.txt /tmp/refs.txt      # expect: every label used
+diff /tmp/cites.txt  /tmp/bibitems.txt  # expect: every cite resolves
+```
+
+# `figures/manifest.md` requirement
+
+Every paper folder carries a `figures/manifest.md` that is the single source of truth for all figures in the manuscript.
+The file is a markdown table with exactly these columns:
+
+```
+| # | Filename | Label | Generator script | Caption summary | Regeneration command |
+```
+
+Each row corresponds to one figure.
+If a figure is still planned but not yet produced, the row is included with `(planned)` in the filename column; this forces every figure to be declared before it is drawn.
+Whenever a figure is added, renamed, or regenerated, the manifest row is edited in the same change.
+The `Filename` column is a bare `.png` filename (see the PNG-only rule below); no paired `.pdf` partner is listed.
+
+# Figures-folder cleanliness
+
+- The `figures/` folder contains only `README.md`, `manifest.md`, and `.png` files. No other file extensions are permitted (no `.pdf`, `.svg`, `.eps`, `.json`, `.csv`, or raw data exports).
+- Every `.png` under `figures/` appears in exactly one non-`(planned)` row of `manifest.md`; every non-`(planned)` manifest row points at a `.png` file that exists on disk.
+- Figure-generator sidecar files (`.json` quantitative summaries, raw traces, intermediate CSVs, fixture files) live next to the generator under `scripts/`, never under `figures/`. The manuscript cites summary numbers via the `scripts/<name>.json` path, not a path inside `figures/`.
+- Orphan artifacts are either promoted to the manifest or deleted; they are never left undocumented.
+
+# Figure-script originality discipline
+
+When two or more papers in this repository share figure-script authors, cross-paper scripts must not converge on a common visual style.
+The same author naturally re-applies the same helpers, palette, and layout idiom; the result is a visually uniform series that reviewers and integrity tooling can correctly flag as common authorship and that reduces the perceived independence of the contributions.
+Each new paper re-derives its figure-generation code along all six axes below.
+
+| # | Axis                | Requirement                                                                                          |
+| - | ------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1 | Helper function names | Rename paper-to-paper (for example `box()` vs. `draw_block()`); do not share names across siblings. |
+| 2 | Colour constants    | Distinct hex codes per paper; no import of a shared palette module.                                  |
+| 3 | Dash patterns       | Each paper picks one dash tuple (for example `(0, (5, 4))` vs. `(0, (6, 3))`) and holds it.          |
+| 4 | Font family         | Distinct `font.family` across siblings (for example `DejaVu Sans` vs. `DejaVu Serif`).               |
+| 5 | Callout style       | Distinct visual vocabulary (numbered circles vs. diamond badges vs. letter tags).                    |
+| 6 | Layout idiom        | Distinct structural approach (imperative `box(x, y, w, h)` sequence vs. coordinate-grid dict vs. `PathPatch` with Bezier curves). |
+
+Reuse by Python import across sibling papers is not permitted; parallel re-derivation is required.
+Shared utilities that would produce identical output (for example a single `palette.py` imported by every paper) are considered a figure-script originality violation.
+The sweep for this rule is a `diff` of any two sibling `scripts/*.py` files for: helper function signatures, RGB/HEX constants, dash-pattern literals, `font.family` strings, and the structural pattern of the main plotting function.
+
+Embedded-domain specifics: block diagrams, pin maps, and CAN-frame bit-layout diagrams are all prone to cross-paper convergence because the underlying graphical vocabulary (rectangles, arrows, bit-ticks) is small.
+A sibling-safe way to honour axis 6 in this domain is to pick one structural idiom per paper and hold it: for example, one paper draws the block diagram with imperative `ax.add_patch(Rectangle(...))` calls, the next uses a coordinate-grid dictionary fed to a helper that walks the grid, and a third composes the diagram from `PathPatch` with Bezier-curved signal routes.
+
+# Acronym discipline
+
+- First use in the abstract: spell-out plus parenthetical acronym, for example `Controller Area Network (CAN)`.
+- First use in the body (independent of the abstract): repeat the spell-out plus parenthetical acronym.
+- Subsequent uses: acronym only.
+- Acronyms introduced in a section and not used again are replaced by the spell-out.
+
+Seed list of acronyms that recur across this repository (the spell-out in the left column is the canonical expansion; the right column indicates whether the acronym is usually safe to use without expansion in an MDPI engineering venue):
+
+| Acronym | Canonical spell-out                        | Expand on first use? |
+| ------- | ------------------------------------------ | -------------------- |
+| CAN     | Controller Area Network                    | Yes                  |
+| CRC     | Cyclic Redundancy Check                    | Yes                  |
+| DLC     | Data Length Code                           | Yes                  |
+| SOF     | Start of Frame                             | Yes                  |
+| EOF     | End of Frame                               | Yes                  |
+| ACK     | Acknowledgement                            | Yes                  |
+| ID      | Identifier                                 | No                   |
+| MCU     | Microcontroller Unit                       | Yes                  |
+| ADC     | Analog-to-Digital Converter                | Yes                  |
+| UART    | Universal Asynchronous Receiver-Transmitter| Yes                  |
+| I2C     | Inter-Integrated Circuit                   | Yes                  |
+| SPI     | Serial Peripheral Interface                | Yes                  |
+| MCC     | MPLAB Code Configurator                    | Yes                  |
+| XC32    | Microchip XC32 compiler                    | Yes                  |
+| GPIO    | General-Purpose Input/Output               | Yes                  |
+| ISR     | Interrupt Service Routine                  | Yes                  |
+| RTOS    | Real-Time Operating System                 | Yes                  |
+| OBD-II  | On-Board Diagnostics, second generation    | Yes                  |
+| ECU     | Electronic Control Unit                    | Yes                  |
+
+The table is not exhaustive; additions are accepted via a one-line amendment to this rule when a new acronym is used across two or more papers.
+
+# Canonical wording templates for mandatory MDPI blocks
+
+To prevent paraphrasing drift across papers on a shared platform, the templates below are copy-paste seeds with one or two placeholder fields.
+Alter the placeholders, not the surrounding phrasing, unless the project demands otherwise.
+
+Papers in this repository do not involve human subjects by default; `\institutionalreview{}` and `\informedconsent{}` are therefore omitted from the canonical seed.
+If a future paper introduces a human-factors study (for example, a driver-usability evaluation of a CAN dashboard), that paper proposes an amendment to this rule before re-introducing the human-subjects blocks.
+
+```latex
+\funding{This research received no external funding.}
+
+\dataavailability{The firmware source, figure-generation scripts, hardware pin map, and captured CAN-bus or oscilloscope traces supporting the reported findings are included in the paper's repository folder under `src/`, `CAN_lab.X/paper/<slug>/scripts/`, `CAN_lab.X/paper/<slug>/hardware/pinmap.md`, and `CAN_lab.X/paper/<slug>/hardware/captures/`, respectively. Public datasets and vendor datasheets are cited inline; derived artefacts are available from the corresponding author on reasonable request.}
+
+\authorcontributions{Conceptualization, <initials>; methodology, <initials>; software, <initials>; validation, <initials>; formal analysis, <initials>; investigation, <initials>; resources, <initials>; data curation, <initials>; writing---original draft preparation, <initials>; writing---review and editing, <initials>; visualization, <initials>; supervision, <initials>; project administration, <initials>. All authors have read and agreed to the published version of the manuscript.}
+
+\conflictsofinterest{The authors declare no conflicts of interest.}
+```
+
+# Citation-key convention
+
+- Pattern: `<LeadAuthorSurname><Year>`.
+- Four-digit year, no abbreviations.
+- Multi-word surnames follow publication conventions (`de la Torre` -> `DelaTorre2025`).
+- Suffix with `a`, `b`, `c` on collision within a year (`Smith2025a`, `Smith2025b`).
+- Vendor documents (Microchip datasheets, application notes) use the pattern `Microchip<DocID>` (for example `MicrochipDS60001712`) so the citation key stays stable across edition revisions.
+- ISO and SAE standards use the pattern `ISO<Number>` or `SAE<Number>` (for example `ISO11898`).
+
+# Required pre-reads
+
+Before drafting prose in a new topic, read:
+
+- `src/main.c` for the reference firmware, including pin assignments, peripheral initialisation, and the CAN-frame construction routine that most papers will cite or extend.
+- `README.md` for the board-to-MCU wiring table, the MCC Melody walkthrough, and the canonical list of controls (buttons, potentiometer, LEDs, OLED) that current papers reference.
+- `claude.md` for the project's design notes and the authoritative explanation of which parts of the current codebase are real hardware, which are transceiver-only, and which are pure software simulation.
+- Every existing `CAN_lab.X/paper/*/main.tex` in full for the phrasings already in use.
+
+A paper that claims reproducibility against the firmware must cite the exact commit hash of `src/main.c` in its Methods section; the pre-reads above ensure the author has seen that firmware before the claim is made.
+
+# Pre-submission readiness checklist
+
+Separate from the writing checklist in `latex-inst.mdc`; covers metadata, scope disclosure, and firmware traceability specifically.
+
+- `\Title{}`, `\TitleCitation{}`, `\Author{}`, `\AuthorCitation{}`, `\AuthorNames{}` populated.
+- ORCID present for every author who has one.
+- `\address{}`, `\corres{}` complete.
+- `\funding{}`, `\dataavailability{}` present and match the templates above (or an approved deviation).
+- `\authorcontributions{}` uses CRediT-style initials only.
+- `\conflictsofinterest{}` present.
+- Target Microchip part number stated in `\Title{}` or abstract (for example `PIC32CM3204GV00048`, `dsPIC33CH512MP508`, `SAM E70Q21B`).
+- CAN protocol role stated in the abstract using one of the three canonical labels: **real CAN controller** (built-in or external MCP2515/MCP25625), **transceiver-only educational simulation** (as on the APP-MASTERS25-1 board with ATA6561), or **pure software simulation** (no transceiver, no bus).
+- Bibliography non-fabrication audit performed (every `\bibitem` inspected against a DOI, arXiv URL, Microchip document ID, or ISO/SAE document number).
+- Label / bibliography hygiene passes.
+- Figures-folder cleanliness passes.
+
+# Commit-message convention
+
+`paper(<slug>): <imperative summary>` for any change that touches `CAN_lab.X/paper/<slug>/**`.
+The slug inside the scope matches the folder name exactly.
+
+# Split-topic guidance
+
+A topic is split into a new manuscript rather than grown further once any of these rule-of-thumb thresholds is crossed:
+
+- Roughly 12,000 words in `main.tex`.
+- Six or more figures declared in `manifest.md`.
+- Methods section needing more than four subsections.
+
+When the split happens, the new manuscript:
+
+- Creates its own slug folder following the core rule and normalisation table.
+- Copies only the MDPI preamble; body prose is drafted from scratch.
+- Cites the parent manuscript via `\cite{...}` wherever the parent's methods are reused.
+- Registers a new row in the slug registry and marks the relationship in its `review/README.md`.
+
+# Cross-paper originality discipline
+
+Before drafting any prose in `CAN_lab.X/paper/<slug>/main.tex`, read every other `CAN_lab.X/paper/*/main.tex` in this repository in full.
+Take note of the argument structures, figure captions, and phrasings already in use.
+Do not copy sentences between sibling manuscripts, even when the underlying method is shared; cite the sibling manuscript via `\cite{...}` and paraphrase at the argument level as defined in `latex-inst.mdc`.
+
+When a technical component is genuinely shared (for example, the same CRC-15 implementation or the same MCC Melody peripheral configuration), the originality obligation is met by:
+
+* writing a new introductory sentence that explains why the component is appropriate for the current topic,
+* citing the sibling paper for the detailed derivation,
+* restricting the current manuscript to the delta relative to the sibling treatment.
+
+A ten-word consecutive overlap with any sibling `main.tex` is treated as self-plagiarism and must be rewritten from a different argument order, not by swapping synonyms.
+
+## Symbol discipline across siblings
+
+When a paper introduces a symbol that any sibling `main.tex` already binds to a different meaning, the new paper must do all three of the following:
+
+1. Pick a visibly distinct symbol.
+   Prefer a subscripted variant (for example `T_{bit,arb}` in an arbitration-phase paper when a sibling paper already uses `T_{bit}` for the single-phase nominal bit time).
+   Never silently rebind the sibling's symbol.
+2. Call out the disambiguation explicitly in the equation's introductory sentence, with wording such as "we use $T_{bit,arb}$ rather than the sibling's $T_{bit}$ to avoid conflating the arbitration-phase bit time with the nominal bit time".
+3. Record the collision in the paper's `review/README.md` under a "Symbol collisions" section so downstream reviewers can audit it.
+
+Symbol collisions are checked during the pre-commit sweep by grepping each new display equation's left-hand side against every sibling `main.tex`.
+
+## Cross-paper citation placement
+
+When a paper builds on a sibling's method, dataset pointer, firmware base, or captured bus log, the sibling is cited in two distinct places, not one:
+
+1. In the Introduction where the method is first named.
+2. In the Methods / Design / Evaluation section at the point of consumption.
+
+Citing the sibling in only one of the two locations is treated as a hygiene failure during the pre-commit sweep.
+The first citation positions the sibling for the reader; the second citation gives the reviewer a concrete anchor against which to check that the consuming paper has not silently redefined the shared component.
+
+# Firmware / hardware replay protocol
+
+When a paper re-uses a sibling's firmware, captured CAN-bus log, oscilloscope trace, or board configuration by citation rather than by re-implementation, the Evaluation section must contain a subsection titled `Firmware / hardware replay protocol` that states four items, in this order:
+
+1. **Source of the replayed artefact.** Which sibling firmware commit, board revision, CAN-bus log, or oscilloscope capture is consumed, cited by `\cite{...}` and by the sibling's public pointer (for example `src/main.c@<commit>`, `CAN_lab.X/paper/<sibling-slug>/hardware/captures/<file>`) when one exists.
+2. **Interface contract.** The CAN baud rate and bit-timing parameters, the CAN ID map with DLC for each identifier, the physical layer realisation (real controller, external MCP2515, transceiver-only educational board, or pure simulation), the MCU clock configuration, the voltage rails, and the board-to-MCU pin map; any conversion step between the sibling's export format (for example raw `asc` log, `blf`, `csv`, or `png` oscilloscope image) and the consuming paper's input format.
+3. **What is held constant versus what is replayed.** Toolchain version (for example `XC32 v4.30`) and MCC Melody snapshot that are unchanged from the sibling; peripheral initialisation stages that are reused verbatim; application-layer logic that is re-executed on the replay; stages that are simulated or stubbed (for example a CRC-15 computation replacing a missing on-chip CAN controller).
+4. **Failure modes.** Explicit behaviour if the sibling's contract changes (chip-revision drift, MCC regeneration differences between tool versions, ATA6561 swap for a different transceiver, loss of a specific board feature), so silent breakage does not occur when a sibling refactors its firmware or hardware baseline.
+
+A paper that replays sibling firmware or captured bus data without a `Firmware / hardware replay protocol` subsection is considered incomplete under this rule and must be extended before pre-submission review.
+
+# Paper-genre appendix
+
+This repository currently admits three manuscript genres.
+Each genre is associated with a required section template and a minimum content contract.
+A paper that spans two genres (for example a hardware-software co-design system evaluated on a reproducibility harness) inherits the union of both contracts.
+
+## Genre A: Hardware-software co-design system
+
+Exemplar: `real_time_vehicle_telemetry_display`.
+
+- **Required sections**: Introduction, Related Work, System Architecture (with subsections for Hardware Platform, Firmware Architecture, Peripheral Integration, CAN Frame Design), Implementation, Results, Discussion, Conclusion.
+- **Minimum content**: 1 table (pin map or CAN ID map), 1 algorithm (for example a CRC-15 calculation or a frame-dispatch routine), 1 numbered equation (for example the bit-timing equation), 2 figures (at minimum one system block diagram and one CAN-frame layout diagram or a dashboard photograph).
+- **Scope disclaimer**: frames the paper as "an engineering system demonstration, not a certified automotive product". The Discussion includes a validation-ladder table with an explicit out-of-scope row that names what would need to change for a certification-ready deployment (for example ISO 11898-1 conformance testing, functional-safety processes, EMC compliance).
+
+## Genre B: Embedded protocol simulation / education tool
+
+- **Required sections**: Introduction, Related Work, System Architecture, Protocol Model (with a CAN-frame structure subsection showing how SOF, ID, DLC, Data, CRC, and EOF are represented in firmware), Pedagogical or Functional Evaluation, Discussion, Conclusion.
+- **Minimum content**: 2 tables (for example an acronym / CAN-field reference and a hardware pin map), 1 algorithm (the simulation loop or the CRC computation), 2 numbered equations (for example CRC polynomial and frame-timing approximation), 3 figures (architecture diagram, frame-bit layout, and a screen or OLED capture demonstrating the simulation).
+- **Scope disclaimer**: frames the paper as "an educational simulator, not a conformance-certified CAN node". The Discussion includes an explicit paragraph stating which CAN-protocol features are simulated (for example arbitration, error frames, bit stuffing) and which are omitted, and names the transceiver-only or no-transceiver nature of the board.
+
+## Genre C: Reproducibility harness / benchmark
+
+- **Required sections**: Introduction, Related Work, Harness Design, Ground-Truth Model (hardware + firmware baseline captured by the harness), Replay Harness, Evaluation Strategy (with a `Firmware / hardware replay protocol` subsection, which is mandatory for this genre), Discussion, Conclusion.
+- **Minimum content**: 2 tables, 1 algorithm, 3 numbered equations, 3 figures.
+- **Scope disclaimer**: frames the paper as "an infrastructure contribution, not a fielded product". The Discussion includes an explicit section on how the harness's synthetic ground truth (for example CRC values computed in software without a real CAN controller observing the bus) differs from physical-layer ground truth captured on a certified bus analyser.
+
+## Genre combination
+
+A paper that satisfies more than one genre contract (for example a Genre A co-design system that ships with a Genre C replay harness) inherits the union of the section lists and the sum of the minimum content contracts.
+The combined genre is recorded in the paper's `review/README.md` under a "Genre" line so that reviewers know which contracts apply.
+
+# Extending the rule
+
+When a genuinely new section type is introduced (for example, a new validation paradigm, a new protocol variant such as CAN FD or CAN XL, or a new family of Microchip parts with substantially different CAN peripherals), extend this rule rather than inventing a local convention inside a single `main.tex`.
+Propose the extension in a plan file, then add it here so subsequent topics inherit the convention automatically.

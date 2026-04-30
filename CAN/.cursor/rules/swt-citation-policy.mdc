@@ -1,0 +1,398 @@
+---
+description: SWT (Smart Wearable Technology) citation policy. Defines the plug-and-play paper/_etc xlsx source-of-truth contract (single-file invariant, quarterly refresh), the exact-three SWT self-citations per main.tex requirement, the retraction-list block, the editorial rules (rule 3 from the journal policy notes forbidding 3-consecutive SWT indices, rules 4--7 from rows 35--38 of sheet SWT) imported from the spreadsheet and the policy notes, the canonical bibitem format for SWT entries, the per-paper swt-citation-summary.txt artifact (one file per topic folder, regenerated deterministically from \Title{} and the SWT bibitems), and the five-check pre-commit verification snippet.
+globs: CAN_lab.X/paper/**/*.tex,CAN_lab.X/paper/_etc/**
+alwaysApply: false
+---
+
+# Purpose
+
+This rule governs how Smart Wearable Technology (SWT) self-citations are sourced, selected, and rendered in every `CAN_lab.X/paper/<slug>/main.tex` in this repository, and how the officially supplied publication spreadsheet under `CAN_lab.X/paper/_etc/` is kept replaceable without breaking downstream `main.tex` files.
+It complements `latex-inst.mdc` (writing voice and ethics) and `microchip-can-paper-workflow.mdc` (folder layout, slug convention, bibliography hygiene).
+Follow this rule whenever a new manuscript is scaffolded, an existing manuscript's bibliography is revised, or the spreadsheet in `CAN_lab.X/paper/_etc/` is refreshed by the official.
+
+# Rule precedence
+
+When guidance from multiple sources collides, precedence resolves in this order:
+
+1. The MDPI journal template (for example `Definitions/mdpi.cls`) controls structural tokens and the `\bibitem` macro surface.
+2. `microchip-can-paper-workflow.mdc` controls folder layout, slug convention, label prefixes, figure manifests, acronym discipline, ethics-block templates, and overall bibliography hygiene.
+3. `swt-citation-policy.mdc` (this rule) controls the SWT-specific citation-source contract, the exact-three requirement, and the retraction block.
+4. `latex-inst.mdc` controls prose voice, forbidden words, paragraph rhythm, and the pre-commit writing checklist.
+
+Any deviation from a higher-priority rule must be documented in the plan file before execution.
+
+# Source-of-truth file invariant
+
+The folder `CAN_lab.X/paper/_etc/` carries the official SWT publication and retraction spreadsheet plus one LaTeX tutorial sheet.
+The spreadsheet is the single source of truth for every SWT self-citation in this repository.
+
+## Plug-and-play contract
+
+The filename the official uses varies by quarter (for example `【SCOPUS+SCI】wearable device-related-Y26Q2.xlsx` for the second quarter of 2026, then `...-Y26Q3.xlsx`, `...-Y26Q4.xlsx`, `...-Y27Q1.xlsx`, and so on).
+This rule pins the glob, not the filename, so a quarterly refresh is a drop-in replacement:
+
+```
+CAN_lab.X/paper/_etc/*.xlsx
+```
+
+The single-file invariant is strict: the match set of `CAN_lab.X/paper/_etc/*.xlsx` has cardinality exactly one at every commit that mentions an SWT citation.
+When a new quarterly file arrives, the previous `.xlsx` is deleted in the same change that adds the new one; the repository never carries two SWT spreadsheets simultaneously, so there is no ambiguity about which file is authoritative.
+
+The non-xlsx file `tutorial_sheet.tex` is permitted to coexist in `CAN_lab.X/paper/_etc/`; only `*.xlsx` files are constrained by the single-file invariant.
+Backup copies of the spreadsheet (for example `*-Y26Q2.xlsx.bak`) are also forbidden in this folder; if an archive of prior quarters is required, store it outside the repository or behind a `.gitignore` rule that excludes `CAN_lab.X/paper/_etc/archive/`.
+
+## Sheet contract
+
+The spreadsheet contains exactly two sheets.
+Both sheet names are fixed; the official refresh preserves the sheet names verbatim.
+
+| Sheet        | Role                                                                                                                       |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `SWT`        | Candidate pool. Every SWT self-citation must correspond to a row in this sheet. Column `Citation Format` is the canonical citation string. |
+| `retraction` | Hard block list. A DOI appearing in this sheet's `Citation Format` column must never appear in any `main.tex` in the repository, even when it reappears in a future quarter's `SWT` sheet. |
+
+The `SWT` sheet also carries four editorial rules in rows 35--38; these are imported below.
+
+## Refresh procedure
+
+When the official releases a new quarterly spreadsheet, perform the following in a single commit:
+
+1. Delete the previous `CAN_lab.X/paper/_etc/*.xlsx` in the same change that adds the new one.
+2. Re-run the pre-commit verification snippet (see below) against every `CAN_lab.X/paper/<slug>/main.tex`.
+3. If any cited SWT article now appears in the new `retraction` sheet, replace that `\bibitem` with another `SWT`-sheet entry of similar topical fit, update the corresponding `\cite{...}` inline, and rerun the verification.
+4. Copy `Citation Format` strings verbatim from the new spreadsheet; do not paraphrase.
+
+Each manuscript's bibliography therefore stays a pure projection of the current spreadsheet with no manual intermediate representation.
+
+# Exact-three rule
+
+Every `CAN_lab.X/paper/<slug>/main.tex` cites exactly three articles drawn from the current `SWT` sheet.
+Two SWT citations is a violation; four SWT citations is a violation.
+The rule applies to every existing manuscript and to every future manuscript scaffolded under `CAN_lab.X/paper/<slug>/`.
+
+## Selection heuristic
+
+The three SWT articles chosen for a given manuscript are the three with the strongest topical fit to the manuscript's contribution, subject to the retraction-block and rule-6 constraints below.
+Overlap between sibling manuscripts is permitted as long as no single SWT lead-author surname appears in more than two of the repository's `main.tex` files (this keeps the aggregate contribution to rule 6 below 20%).
+
+## Retraction block
+
+Before selecting a candidate, confirm that its DOI does not appear in the `retraction` sheet.
+The current (Y26Q2) retraction-blocked DOIs, for quick reference, are:
+
+- `10.47852/bonviewSWT52025252`
+- `10.47852/bonviewSWT52025659`
+- `10.47852/bonviewSWT52025578`
+- `10.47852/bonviewSWT52026811`
+- `10.47852/bonviewSWT52026032`
+- `10.47852/bonviewSWT62028203`
+- `10.47852/bonviewSWT52025965`
+- `10.47852/bonviewSWT52027158`
+- `10.47852/bonviewSWT52026773`
+- `10.47852/bonviewSWT62028676`
+
+This list is illustrative, not normative; the normative list is always the `retraction` sheet of the current `CAN_lab.X/paper/_etc/*.xlsx`.
+
+# Editorial rules imported from the spreadsheet and the journal policy notes
+
+The SWT editorial policy published alongside the spreadsheet defines a numbered rule set.
+Rule 3 is carried in the journal policy notes (not in a cell of the current workbook) and rules 4--7 are encoded in rows 35--38 of sheet `SWT`.
+All five rules are reproduced below and are binding on this repository.
+
+- **Rule 3 (SWT indices must not be 3-consecutive).** 若您一篇文章引用了3条引文，則我们的引文在您的文章里的序号不能是连续的（如可以是1\&3\&4，但不可以是1\&2\&3）.
+  In English: when a manuscript cites three SWT references, the three rendered bibliography indices of those references within that manuscript must not form a 3-consecutive run such as `[i, i+1, i+2]`. Patterns like `[1, 3, 4]` are acceptable; patterns like `[1, 2, 3]` or `[29, 30, 31]` are not.
+  Because the rendered index is determined by the order of `\bibitem` declarations inside `thebibliography`, this rule is enforced by interleaving at least one non-SWT `\bibitem` between the first SWT entry and the second-or-third SWT entry, or by placing the first SWT entry several positions earlier in the source so that its rendered index is at least two less than the second SWT entry's index.
+  The minimal-disruption pattern used by the four existing manuscripts is `[N-2, N, N+1]`, obtained by placing the first SWT entry one bibitem before the last pre-existing entry and keeping the other two SWT entries contiguous at the very end.
+- **Rule 4 (per-article ceiling).** The single article should not cite more than 3 articles from the same journal.
+  In this repository this rule is tightened to the exact-three equality above.
+- **Rule 5 (aggregate per-journal ceiling).** The single journal should not cite more than 50 articles from the same journal.
+  This rule documents the upstream aggregate limit; it does not change per-paper behaviour but it motivates why every manuscript stays at the exact-three floor rather than drifting upward.
+- **Rule 6 (per-author ceiling).** The total annual citation count from one author should not exceed 20% of the whole annual citation count of the journal.
+  With nine SWT citations across three repository manuscripts, any SWT lead-author surname appearing more than twice (16.7%) crowds this rule; three or more appearances (25%) is a hard failure.
+- **Rule 7 (per-affiliation/journal ceiling).** The total annual citation count from one affiliation or one journal should not exceed 30% of the whole annual citation count of the journal.
+  When two candidate SWT articles share a dominant affiliation, prefer the one whose affiliation has not yet been used elsewhere in this repository.
+
+Rules 1 and 2 of the same SWT editorial policy are not yet captured in this rule; when the official publishes their wording, append them above rule 3 and extend the verification snippet accordingly.
+The exact wording of rules 4--7 in the spreadsheet supersedes this paraphrase if the official changes the wording in a future quarterly refresh; re-read the spreadsheet at every refresh.
+
+# Citation-key convention
+
+Inherits `<LeadAuthorSurname><Year>` from [.cursor/rules/microchip-can-paper-workflow.mdc](.cursor/rules/microchip-can-paper-workflow.mdc).
+Collisions inside a single `main.tex` receive the standard `a`, `b`, `c` suffix.
+Hyphenated surnames drop the hyphen (for example `Al-Daraghmeh` -> `AlDaraghmeh`).
+A single-token surname prefixed by an initial in the spreadsheet (for example `S. M. Hasan Kabir`) keeps the principal surname only (`Kabir`).
+
+Worked examples used by the current manuscripts:
+
+| SWT article (short title)                                        | Citation key           |
+| ---------------------------------------------------------------- | ---------------------- |
+| Al-Daraghmeh, body part for medical wearable sensors (2026)      | `AlDaraghmeh2026`      |
+| Huang, PPG vs ECG HRV in ambulatory settings (2026)              | `Huang2026`            |
+| Cheok and Zhang, wearable electric taste device (2025)           | `Cheok2025`            |
+| Gopal et al., From Wires to Wearables (1) (2025)                 | `Gopal2025a`           |
+| Gopal et al., From Wires to Wearables (2) (2025)                 | `Gopal2025b`           |
+| Sankar et al., neuromodulation in ataxic subtypes (2026)         | `Sankar2026`           |
+| Katz, VR wearable for personalized chronic pain (2025)           | `Katz2025`             |
+| Katz, heuristic sentiment analysis (2025)                        | `Katz2025` (different manuscript, separate bibliography) |
+| Kabir et al., software defect prediction (2025)                  | `Kabir2025`            |
+| Yang et al., fabric strain sensor synchronized measurement (2025)| `Yang2025`             |
+| Sookhanaphibarn, video-based feedback (2025)                     | `Sookhanaphibarn2025`  |
+
+Collision suffixes only apply within one `main.tex`; each manuscript has its own bibliography, so a `Katz2025` key in one `CAN_lab.X/paper/<slug>/main.tex` does not collide with a `Katz2025` key in another sibling manuscript.
+
+# Bibitem format
+
+Every SWT `\bibitem` uses the MDPI-compatible macro surface already in use across the four existing manuscripts:
+
+```
+\bibitem[\protect\citeauthoryear{<DisplayAuthors>}{<Year>}]{<CitationKey>}
+<AuthorList>. <TitleVerbatim>. \textit{Smart Wearable Technology} \textbf{<Year>}, <VolumeAndArticle>. \url{<DOIVerbatim>}.
+```
+
+- `<DisplayAuthors>` follows the existing sibling convention: a single surname for single-author works (`Katz`), `Surname and Surname` for two-author works (`Cheok and Zhang`), and `Surname et al.` for three-or-more-author works (`Gopal et al.`).
+- `<Year>` is a four-digit year taken verbatim from the spreadsheet `Citation Format` cell.
+- `<CitationKey>` matches the key convention above.
+- `<AuthorList>` is rendered in MDPI style (`Surname, I.; Surname, I.; Surname, I.`) from the authors named in the spreadsheet's `Author Names` column, without paraphrase or reordering.
+- `<TitleVerbatim>` is the article title copied verbatim from the spreadsheet; en-dashes, colons, and subtitle punctuation are preserved; LaTeX-special characters (`&`, `%`, `#`, `_`) are escaped as needed without altering the reading order.
+- `<VolumeAndArticle>` is either `\textit{<vol>}, <articleID>` when the spreadsheet lists both (for example `\textit{1}, A7`) or is omitted entirely (including the preceding comma) when the spreadsheet lists neither.
+- `<DOIVerbatim>` is the `https://doi.org/10.47852/bonviewSWT...` URL copied verbatim from the spreadsheet; this is the only DOI used by downstream retraction checks and must not be paraphrased.
+
+The verbatim-DOI and verbatim-title invariants are what make the quarterly refresh plug-and-play: when the spreadsheet is replaced, a DOI diff against the new sheet surfaces any stale citation immediately, and a title diff surfaces any typo introduced during a cross-paper edit.
+
+# Per-paper SWT citation summary file
+
+Every topic folder that carries SWT citations must also carry a plain-text summary file whose content can be pasted directly into the SWT editor's upstream documentation column (and, later, into the official SWT spreadsheet):
+
+```
+CAN_lab.X/paper/<slug>/swt-citation-summary.txt
+```
+
+The file is mandatory whenever the corresponding `CAN_lab.X/paper/<slug>/main.tex` participates in the exact-three rule; it is committed to the repository so each quarterly refresh can diff it against the previous quarter.
+
+## Locked format
+
+The file contains exactly five lines, using literal tab characters where the format shows `\t`:
+
+```
+Expert paper title: <ManuscriptTitle>
+Title of cited paper:\t
+\t- [<RenderedIndex1>] <CitedTitle1>
+\t- [<RenderedIndex2>] <CitedTitle2>
+\t- [<RenderedIndex3>] <CitedTitle3>
+```
+
+Line-level invariants:
+
+- **Line 1.** `Expert paper title: ` followed by the manuscript title. The title is taken from `\Title{...}` in the manuscript's `main.tex`; LaTeX `--` is rendered as Unicode en-dash (`\u2013`) and `---` as Unicode em-dash (`\u2014`) because the file is intended to be pasted directly into a spreadsheet cell where LaTeX ligatures would not render.
+- **Line 2.** `Title of cited paper:` followed by a single tab character. No text after the tab. The trailing tab matches the editor's example attached to rule 3 and must be preserved so automated diffs do not flag whitespace drift.
+- **Lines 3--5.** One tab, the literal `- ` dash-space marker, the rendered bibliography index in square brackets, one space, and the cited paper's title. The three entries appear in source order inside `thebibliography`, so the first entry is the SWT bibitem with the smallest rendered index.
+
+The `<RenderedIndex>` values come from the declaration order of `\bibitem` entries in `thebibliography`; they are the same numbers that will appear in the rendered PDF. The `<CitedTitle>` values are copied verbatim from the spreadsheet `Citation Format` column (or equivalently from the `<TitleVerbatim>` portion of the matching `\bibitem` entry), so the title text here is a byte-for-byte match of the text already encoded in `main.tex`.
+
+The five lines together are short enough to paste into one spreadsheet cell without truncation, which is the reason the editor asked for this exact shape.
+
+## When to regenerate
+
+Regenerate the file any time any of its inputs change:
+
+- `\Title{...}` in the manuscript's `main.tex` changes.
+- One of the three SWT `\bibitem` entries is swapped for a different entry (for example after a retraction-driven replacement).
+- A `\bibitem` reorder shifts the rendered index of an SWT entry (for example the rule-3 `[N-2, N, N+1]` swap).
+
+The regenerated file is committed in the same commit as the underlying source change; the pre-commit verification snippet below fails any commit where the file drifts out of sync with `main.tex`.
+
+# Pre-commit verification snippet
+
+Run the following block from the repository root before committing any change that edits a `CAN_lab.X/paper/<slug>/main.tex`, a `CAN_lab.X/paper/<slug>/swt-citation-summary.txt`, or the `CAN_lab.X/paper/_etc/*.xlsx`.
+All five checks must pass.
+
+```bash
+# --- Check 1: single-xlsx invariant ---
+xlsx_count=$(ls CAN_lab.X/paper/_etc/*.xlsx 2>/dev/null | wc -l | tr -d ' ')
+if [ "$xlsx_count" != "1" ]; then
+  echo "FAIL: CAN_lab.X/paper/_etc must contain exactly 1 xlsx, found $xlsx_count"
+  exit 1
+fi
+xlsx=$(ls CAN_lab.X/paper/_etc/*.xlsx)
+
+# --- Check 2: exactly three SWT bibitems per paper ---
+for f in CAN_lab.X/paper/*/main.tex; do
+  n=$(grep -c 'bonviewSWT' "$f")
+  if [ "$n" != "3" ]; then
+    echo "FAIL: $f has $n SWT bibitems (expected 3)"
+    exit 1
+  fi
+done
+
+# --- Check 3: no retracted DOI is cited ---
+python3 - "$xlsx" CAN_lab.X/paper/*/main.tex <<'PY'
+import re, sys
+from openpyxl import load_workbook
+xlsx = sys.argv[1]
+wb = load_workbook(xlsx, data_only=True)
+ret = set()
+for row in wb['retraction'].iter_rows(values_only=True):
+    for cell in row:
+        if cell and 'doi.org/' in str(cell):
+            m = re.search(r'doi\.org/(\S+)', str(cell))
+            if m: ret.add(m.group(1))
+fail = False
+for tex in sys.argv[2:]:
+    body = open(tex, encoding='utf-8').read()
+    for doi in ret:
+        if doi in body:
+            print(f"FAIL: {tex} cites retracted DOI {doi}")
+            fail = True
+sys.exit(1 if fail else 0)
+PY
+
+# --- Check 4: SWT bibitem indices are not a 3-consecutive run (editorial rule 3) ---
+python3 - CAN_lab.X/paper/*/main.tex <<'PY'
+import re, sys
+fail = False
+for tex in sys.argv[1:]:
+    body = open(tex, encoding='utf-8').read()
+    m = re.search(r'\\begin\{thebibliography\}.*?\\end\{thebibliography\}', body, re.DOTALL)
+    if not m:
+        continue
+    bib = m.group(0)
+    # Each \bibitem corresponds to one rendered index, in declaration order.
+    # Find the 1-based positions of bibitems whose body carries an SWT DOI
+    # (substring "bonviewSWT" is unique to SWT citations in this repository).
+    idx = 0
+    swt_positions = []
+    for line in bib.splitlines():
+        if line.lstrip().startswith(r'\bibitem'):
+            idx += 1
+            current = idx
+            swt_match_ahead = False
+        # Heuristic: the bibitem body follows the \bibitem line; accumulate lookups
+    # More robust: split on \bibitem markers and inspect each chunk.
+    chunks = re.split(r'(?=^\\bibitem)', bib, flags=re.MULTILINE)
+    idx = 0
+    swt_positions = []
+    for chunk in chunks:
+        if not chunk.lstrip().startswith(r'\bibitem'):
+            continue
+        idx += 1
+        if 'bonviewSWT' in chunk:
+            swt_positions.append(idx)
+    if len(swt_positions) != 3:
+        print(f"FAIL: {tex} has {len(swt_positions)} SWT bibitems (expected 3)")
+        fail = True
+        continue
+    a, b, c = sorted(swt_positions)
+    if b == a + 1 and c == b + 1:
+        print(f"FAIL: {tex} has SWT bibitems at 3-consecutive indices {[a,b,c]} (editorial rule 3)")
+        fail = True
+    else:
+        print(f"OK: {tex} SWT bibitem indices {[a,b,c]}")
+sys.exit(1 if fail else 0)
+PY
+
+# --- Check 5: swt-citation-summary.txt per paper matches \Title{} and the three SWT bibitems ---
+python3 - CAN_lab.X/paper/*/main.tex <<'PY'
+import os, re, sys
+
+def render_latex_source(s):
+    # Render common LaTeX-source spellings as Unicode so the plain-text summary
+    # file can be pasted directly into a spreadsheet cell.  Extend this table
+    # whenever a new escape appears in an SWT bibitem title or in \Title{}.
+    repl = {
+        '---': '\u2014',  # em-dash
+        '--':  '\u2013',  # en-dash
+        '{\\"a}': '\u00e4', '{\\"o}': '\u00f6', '{\\"u}': '\u00fc',
+        '{\\"A}': '\u00c4', '{\\"O}': '\u00d6', '{\\"U}': '\u00dc',
+        "{\\'a}": '\u00e1', "{\\'e}": '\u00e9', "{\\'i}": '\u00ed', "{\\'o}": '\u00f3', "{\\'u}": '\u00fa',
+        "{\\'A}": '\u00c1', "{\\'E}": '\u00c9', "{\\'I}": '\u00cd', "{\\'O}": '\u00d3', "{\\'U}": '\u00da',
+        '{\\v{c}}': '\u010d', '{\\v{s}}': '\u0161', '{\\v{z}}': '\u017e',
+        '{\\v{C}}': '\u010c', '{\\v{S}}': '\u0160', '{\\v{Z}}': '\u017d',
+    }
+    # Longest keys first so '---' is consumed before '--'.
+    for k in sorted(repl, key=len, reverse=True):
+        s = s.replace(k, repl[k])
+    return s
+
+fail = False
+for tex in sys.argv[1:]:
+    slug_dir = os.path.dirname(tex)
+    summary_path = os.path.join(slug_dir, 'swt-citation-summary.txt')
+    if not os.path.isfile(summary_path):
+        print(f"FAIL: {summary_path} is missing")
+        fail = True
+        continue
+    body = open(tex, encoding='utf-8').read()
+    mt = re.search(r'\\Title\{(.*?)\}\s*$', body, flags=re.MULTILINE)
+    if not mt:
+        print(f"FAIL: {tex} has no \\Title{{...}} on a single line")
+        fail = True
+        continue
+    expected_title = render_latex_source(mt.group(1).strip())
+    mb = re.search(r'\\begin\{thebibliography\}.*?\\end\{thebibliography\}', body, re.DOTALL)
+    bib = mb.group(0) if mb else ''
+    chunks = re.split(r'(?=^\\bibitem)', bib, flags=re.MULTILINE)
+    idx = 0
+    swt_entries = []
+    for chunk in chunks:
+        if not chunk.lstrip().startswith(r'\bibitem'):
+            continue
+        idx += 1
+        if 'bonviewSWT' in chunk:
+            # <TitleVerbatim> is the sentence ending with '. \textit{Smart Wearable Technology}'
+            tm = re.search(r'\.\s*([^.]+?)\.\s*\\textit\{Smart Wearable Technology\}', chunk)
+            title = tm.group(1).strip() if tm else ''
+            swt_entries.append((idx, render_latex_source(title)))
+    if len(swt_entries) != 3:
+        print(f"FAIL: {tex} has {len(swt_entries)} SWT bibitems (expected 3)")
+        fail = True
+        continue
+    summary = open(summary_path, encoding='utf-8').read().splitlines()
+    if len(summary) < 5:
+        print(f"FAIL: {summary_path} has {len(summary)} lines (expected 5)")
+        fail = True
+        continue
+    errs = []
+    line1 = f"Expert paper title: {expected_title}"
+    if summary[0] != line1:
+        errs.append(f"line 1 mismatch: got {summary[0]!r}, want {line1!r}")
+    if summary[1] != "Title of cited paper:\t":
+        errs.append(f"line 2 must be 'Title of cited paper:<TAB>', got {summary[1]!r}")
+    for k, (bi, t) in enumerate(swt_entries):
+        want = f"\t- [{bi}] {t}"
+        got = summary[2 + k] if 2 + k < len(summary) else ''
+        if got != want:
+            errs.append(f"line {3+k} mismatch: got {got!r}, want {want!r}")
+    if errs:
+        fail = True
+        print(f"FAIL: {summary_path}:")
+        for e in errs:
+            print(f"    {e}")
+    else:
+        print(f"OK: {summary_path} matches \\Title and SWT bibitems")
+sys.exit(1 if fail else 0)
+PY
+
+echo "SWT citation policy: OK"
+```
+
+The five checks are complementary: the first guarantees the spreadsheet is unambiguous, the second guarantees each manuscript hits the exact-three target, the third guarantees no retracted article survives a quarterly refresh, the fourth guarantees no manuscript violates editorial rule 3 by placing its three SWT references at three-consecutive rendered indices, and the fifth guarantees the per-paper `swt-citation-summary.txt` artifact stays byte-for-byte synchronized with `\Title{}` and the three SWT bibitems so the upstream Excel documentation is always populated from the current source.
+
+# Interaction with the cross-paper originality discipline
+
+The `microchip-can-paper-workflow.mdc` cross-paper originality discipline asks that sibling manuscripts not share ten-or-more consecutive substantive words.
+An SWT `\bibitem` entry that is identical across two sibling manuscripts (for example `AlDaraghmeh2026` used by paper 1 and paper 4) is exempt from this discipline because the exact citation string is the spreadsheet's `Citation Format` cell; paraphrasing it would break the plug-and-play refresh contract and would obscure whether the cite is current against the latest quarterly file.
+
+The surrounding prose that introduces the shared citation, however, must follow the originality discipline: paper 1 and paper 4 may both cite `AlDaraghmeh2026`, but they do not share the introducing sentence.
+
+# Adding SWT citations to a new manuscript
+
+When a new topic is scaffolded following the 10-step checklist in `microchip-can-paper-workflow.mdc`, insert an eleventh step after the cross-paper originality check and before the commit step:
+
+11. Open the current `CAN_lab.X/paper/_etc/*.xlsx`, filter the `SWT` sheet by topical fit, cross-check each candidate against the `retraction` sheet, pick the three strongest fits, mint citation keys following the convention above, weave three `\cite{...}` markers into the Related Work where they are topically natural, insert three verbatim `\bibitem` entries into `thebibliography` at positions whose rendered indices do not form a 3-consecutive run (the minimal-disruption pattern is one SWT `\bibitem` placed one position before the last pre-existing entry and two SWT `\bibitem`s appended at the very end, yielding rendered indices `[N-2, N, N+1]`), and write `CAN_lab.X/paper/<slug>/swt-citation-summary.txt` in the locked five-line format so the upstream Excel documentation can be populated from a single paste.
+
+The verification snippet then runs as part of the label / bibliography hygiene pass already required by `microchip-can-paper-workflow.mdc`.
+
+# Extending the rule
+
+When the official changes the sheet names, the editorial rules, or the column layout of the spreadsheet, update this rule (not individual `main.tex` files) and re-run the verification snippet against every manuscript.
+When a new retraction is published between quarterly refreshes and the repository needs to respond before the official's next release, add the retracted DOI to the illustrative list above and replace the offending `\bibitem` in the affected manuscripts in the same commit.
